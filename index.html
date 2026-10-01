@@ -735,9 +735,18 @@ body.is-calm .glow { opacity: 0.35 !important; }
         </p>
 
         <div class="hint reveal" style="--d:860ms">
-          <span class="hint-item"><i class="ico ico--move" aria-hidden="true"></i>移动光标，星空会跟着你</span>
-          <span class="hint-sep" aria-hidden="true"></span>
-          <span class="hint-item"><i class="ico ico--click" aria-hidden="true"></i>轻点一下，点亮一片星尘</span>
+          <!-- 桌面：鼠标操作 -->
+          <span class="hint-set hint-set--pointer">
+            <span class="hint-item"><i class="ico ico--move" aria-hidden="true"></i>移动光标，星空会跟着你</span>
+            <span class="hint-sep" aria-hidden="true"></span>
+            <span class="hint-item"><i class="ico ico--click" aria-hidden="true"></i>轻点一下，点亮一片星尘</span>
+          </span>
+          <!-- 手机：触摸手势（每行一句，不再挤成两行） -->
+          <span class="hint-set hint-set--touch">
+            <span class="hint-item"><i class="ico ico--move" aria-hidden="true"></i>滑动 → 拖出星尘</span>
+            <span class="hint-item"><i class="ico ico--click" aria-hidden="true"></i>轻点 → 点亮一片星光</span>
+            <span class="hint-item"><i class="ico ico--hold" aria-hidden="true"></i>长按 → 凝聚一团星尘</span>
+          </span>
         </div>
       </div>
 
