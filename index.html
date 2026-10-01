@@ -2513,7 +2513,9 @@ body.is-calm .glow { opacity: 0.35 !important; }
     let starting = false;
     const timers = new Set();     // 所有 setTimeout / setInterval，切换时统一清掉
 
-    const MASTER_PEAK = 0.85;     // 主音量上限（避免削顶，单个声景内部已控制峰值）
+    /* 主音量上限。深空有 5 个正弦叠加，同相位时峰值可达单声部的数倍，
+       所以留出余量，并在总线上再挂一个软限幅兜底 —— 削顶即使轻微也会显得刺耳。 */
+    const MASTER_PEAK = 0.72;
 
     /* ---------- 工具 ---------- */
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
@@ -2896,7 +2898,18 @@ body.is-calm .glow { opacity: 0.35 !important; }
             ac = new AC();
             master = ac.createGain();
             master.gain.value = 0;
-            master.connect(ac.destination);
+            // 软限幅：仅在接近满刻度时压缩，平时完全不介入
+            if (ac.createDynamicsCompressor) {
+              const limiter = ac.createDynamicsCompressor();
+              limiter.threshold.value = -6;
+              limiter.knee.value = 6;
+              limiter.ratio.value = 12;
+              limiter.attack.value = 0.003;
+              limiter.release.value = 0.25;
+              master.connect(limiter).connect(ac.destination);
+            } else {
+              master.connect(ac.destination);
+            }
           }
           if (ac.state === 'suspended') await ac.resume();
         } finally {
