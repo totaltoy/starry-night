@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="starry-build" content="1001-88abea" />
+<meta name="starry-build" content="1001-273712" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>星野 · 今夜只听星光</title>
 <meta name="theme-color" content="#03040d" />
@@ -937,7 +937,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
             <p class="snd-title">声景</p>
             <div class="snd-list" role="radiogroup" aria-label="选择声景">
               <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="drone">
-                <span class="snd-name">深空</span><span class="snd-desc">低频垫音与颂钵</span>
+                <span class="snd-name">深空</span><span class="snd-desc">微光与颂钵</span>
               </button>
               <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="rain">
                 <span class="snd-name">雨</span><span class="snd-desc">雨幕与远雷</span>
@@ -2587,68 +2587,71 @@ body.is-calm .glow { opacity: 0.35 !important; }
     };
 
     /* ---------- 深空：低频垫音 + 空气 + 颂钵 ---------- */
+    /* ---------- 深空 · 只留微光 ----------
+       设计取舍：不放任何音高垫音。
+
+       为什么放弃垫音：持续存在的低频垫音有两个问题 ——
+         1. 两个纯音之间会产生差频（互调失真）。55Hz 与 82.41Hz 相差 27.4Hz，
+            这个频率接近次声，听感是胸闷式的搏动而非「低音」。
+         2. 更根本的是心理层面：只要有一层声音一直在，人就会下意识等待它变化或消失。
+            留白反而更安静 —— 静默本身就是内容。
+
+       所以这里只保留两样东西：
+         · 极轻的高频噪声「微光」：两层窄带噪声，缓慢起伏，几乎察觉不到
+         · 偶尔一声颂钵：28~75 秒一次，是唯一的音高事件
+    */
     function drone(ctx, out) {
-      // 两级低通 = 24dB/oct。原来单级只有 12dB/oct，三角波的奇次谐波
-      // （220Hz 的 3 次谐波在 660Hz）几乎原样漏过去，这就是「刺耳」的来源。
-      const cut1 = ctx.createBiquadFilter();
-      cut1.type = 'lowpass';
-      cut1.frequency.value = 520;
-      cut1.Q.value = 0.4;
-      lfo(ctx, 0.06, 150, cut1.frequency);
-      const cut2 = ctx.createBiquadFilter();
-      cut2.type = 'lowpass';
-      cut2.frequency.value = 520;
-      cut2.Q.value = 0.4;
-      cut1.connect(cut2).connect(out);
+      // 微光层一：中高频窄带噪声。极轻 —— 它应该像「感觉到」而非「听到」
+      const shimmer1 = ctx.createGain();
+      shimmer1.gain.value = 0.011;
+      lfo(ctx, 0.021, 0.004, shimmer1.gain);        // 周期约 48 秒，幅度极小
+      const bp1 = ctx.createBiquadFilter();
+      bp1.type = 'bandpass';
+      bp1.frequency.value = 3400;
+      bp1.Q.value = 0.55;
+      loopNoise(ctx, pinkBuffer(ctx, 7)).connect(bp1).connect(shimmer1).connect(out);
 
-      // 全部换成正弦：正弦没有谐波，从根本上消除刺耳感。
-      // 原来高两个音用三角波，是为了「亮一点」，代价就是那些谐波。
-      // 音量分层也重排：低音略降、中音略抬，让厚度仍在但不轰。
-      // 峰值合计控制在 0.42 左右。之前是 0.46+0.30+0.15+0.075+0.045 ≈ 1.03，
-      // 已经越过软限幅阈值(-6dB≈0.5)，等于深空一直在被压缩 —— 听感会发闷发毛。
-      /* 音区抬高：去掉 55Hz 与 82.41Hz。
-         原因：这两个纯音相差 27.4Hz，会产生同频的差频（互调失真），
-         27Hz 接近次声 —— 听感不是「低音」而是胸闷式的搏动。
-         而且 82.41 与 110 又相差 27.6Hz，两个差频叠在同一处。
-         现在从 A2(110Hz) 起，按纯五度、八度排列，音程远大于临界带宽，
-         差频落在 50Hz 以上且强度很低，不再有压迫感。 */
-      [
-        [110.00, 0.052],   // A2
-        [164.81, 0.028],   // E3（纯五度）
-        [220.00, 0.015],   // A3
-        [329.63, 0.006],   // E4
-      ].forEach(([f, base], i) => {
-        const o = ctx.createOscillator();
+      // 微光层二：更高、更轻。两层叠加让质感有一点层次，不至于像电流底噪
+      const shimmer2 = ctx.createGain();
+      shimmer2.gain.value = 0.005;
+      lfo(ctx, 0.033, 0.002, shimmer2.gain);
+      const bp2 = ctx.createBiquadFilter();
+      bp2.type = 'bandpass';
+      bp2.frequency.value = 6800;
+      bp2.Q.value = 0.8;
+      loopNoise(ctx, pinkBuffer(ctx, 5)).connect(bp2).connect(shimmer2).connect(out);
+
+      /* 微光闪烁：极短极轻的高音点，像很远处星芒的一闪。
+         频率限制在 1.7~3.1kHz 且用正弦 —— 再高或带谐波都会变刺。 */
+      const twinkle = () => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + rand(0.05, 0.7);
+        const o = ac.createOscillator();
         o.type = 'sine';
-        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.003);
-        const g = ctx.createGain();
-        g.gain.value = base;
-        /* 音量的起伏大幅收浅：原来 ±50%，现在 ±12%，
-           且周期拉长到 30~70 秒。原来的深度与多个不同周期叠加后，
-           会产生缓慢而不规则的抽动 —— 说不出哪里不对，但就是不舒服。 */
-        lfo(ctx, 0.014 + i * 0.008, base * 0.12, g.gain);
-        o.connect(g).connect(cut1);
-        o.start();
-      });
+        o.frequency.value = rand(1700, 3100);
+        const g = ac.createGain();
+        const peak = rand(0.0035, 0.009);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(peak, t0 + 0.03);        // 起音 30ms：不脆
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + rand(0.5, 1.6));
+        o.connect(g).connect(out);
+        o.start(t0);
+        o.stop(t0 + 2);
+      };
+      const sparkle = () => {
+        twinkle();
+        if (Math.random() < 0.3) later(twinkle, rand(200, 900));   // 偶尔连闪两下
+        later(sparkle, rand(7000, 22000));
+      };
+      later(sparkle, rand(3000, 9000));
 
-      // 呼吸层：不做音高，只留噪声。它是「有生命力」的来源，
-      // 也是替代低频垫音的主要质感 —— 所以这里给得比原来厚一点。
-      const air = ctx.createGain();
-      air.gain.value = 0.055;
-      lfo(ctx, 0.028, 0.030, air.gain);        // 约 36 秒一次的呼气感
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'lowpass';
-      bp.frequency.value = 560;                 // 无音高的气声，压在低频上方
-      bp.Q.value = 0.4;
-      loopNoise(ctx, pinkBuffer(ctx, 6)).connect(bp).connect(air).connect(out);
-
-      // 颂钵：反馈延迟做长余韵，随机触发
+      // —— 颂钵：唯一的音高事件，也是这个声景的主角 ——
       const bellBus = ctx.createGain();
       bellBus.gain.value = 0.26;     // 让总线处的峰值落在 0.075 左右（见下方 partials）
       const delay = ctx.createDelay(2.5);
       delay.delayTime.value = 1.6;
       const fb = ctx.createGain();
-      fb.gain.value = 0.26;      // 收小反馈：原来 0.42，余韵叠太久会发浑
+      fb.gain.value = 0.26;          // 收小反馈：原来 0.42，余韵叠太久会发浑
       // 单独给颂钵一条 2.2kHz 低通：即使泛音算错了，也不会窜到刺耳的频段
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
@@ -2663,13 +2666,15 @@ body.is-calm .glow { opacity: 0.35 !important; }
         const t0 = ac.currentTime + Math.random() * 0.6;
         // 音高整体下调一个八度内：原来最高到 784Hz，泛音很容易尖
         const base = [392.00, 440.00, 493.88, 587.33][(Math.random() * 4) | 0];
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.030, t0 + 1.1);   // 起音放慢：不是敲击，是浮上来
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 11);
+        g.connect(bellBus);
         /* 泛音表：[倍数, 幅度, 自身衰减秒数]
-           去掉了原来的 4.12 倍 —— 基频 392~587Hz 时它落在 1.6~2.4kHz，
-           正好是人耳最敏感、最容易觉得「刺」的频段。
-           并且让每个泛音单独衰减：高频衰减更快，这是真实钟磬的物理行为
-           （高频振动耗散更快），也是让音色变圆润的关键。 */
-        // 只留两个泛音：基频 + 略失谐的八度。
-        // 去掉 2.98 / 3.96 后不再有金属感的高频，是柔和的钟磬而非「叮」。
+           只留基频与略失谐的八度 —— 去掉 2.98 / 3.96 后不再有金属感的高频，
+           是柔和的钟磬而非「叮」。逐泛音衰减是让音色圆润的关键：
+           真实钟磬的高频振动耗散更快，所以先是明亮，随后转为绵长的嗡鸣。 */
         const partials = [
           [1.000, 1.00, 9.5],      // 余韵拉长，收尾更绵
           [2.004, 0.26, 6.5],
@@ -2961,7 +2966,10 @@ body.is-calm .glow { opacity: 0.35 !important; }
        目标取各声景的中位数，补偿限制在 ±3 倍以内
        （不取最轻的当基准 —— 那样会把雨和篝火压到几乎听不见，抹掉声景性格）。
        琴偏轻是刻意的：稀疏音符的感知响度本就低。 */
-    const TRIM = { drone: 2.58, rain: 0.51, waves: 0.94, fire: 0.48, forest: 1.06, piano: 3.0 };
+    /* 深空刻意取补偿上限 3.0：它现在是「只留微光」，本就该远轻于其他声景
+       （微光峰值 0.033，其他声景约 0.21）。但颂钵同样被这个系数乘到 0.089，
+       所以那一声钟依然清楚 —— 轻的是底噪，不是钟。 */
+    const TRIM = { drone: 3.0, rain: 0.51, waves: 0.94, fire: 0.48, forest: 1.06, piano: 3.0 };
 
     const SCAPES = {
       drone:  { label: '深空',   build: drone  },
