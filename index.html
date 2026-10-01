@@ -2582,33 +2582,44 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
     /* ---------- 深空：低频垫音 + 空气 + 颂钵 ---------- */
     function drone(ctx, out) {
-      const filt = ctx.createBiquadFilter();
-      filt.type = 'lowpass';
-      filt.frequency.value = 760;
-      filt.Q.value = 0.6;
-      lfo(ctx, 0.06, 240, filt.frequency);
-      filt.connect(out);
+      // 两级低通 = 24dB/oct。原来单级只有 12dB/oct，三角波的奇次谐波
+      // （220Hz 的 3 次谐波在 660Hz）几乎原样漏过去，这就是「刺耳」的来源。
+      const cut1 = ctx.createBiquadFilter();
+      cut1.type = 'lowpass';
+      cut1.frequency.value = 520;
+      cut1.Q.value = 0.4;
+      lfo(ctx, 0.06, 150, cut1.frequency);
+      const cut2 = ctx.createBiquadFilter();
+      cut2.type = 'lowpass';
+      cut2.frequency.value = 520;
+      cut2.Q.value = 0.4;
+      cut1.connect(cut2).connect(out);
 
-      [55.0, 82.41, 110.0, 164.81, 220.0].forEach((f, i) => {
+      // 全部换成正弦：正弦没有谐波，从根本上消除刺耳感。
+      // 原来高两个音用三角波，是为了「亮一点」，代价就是那些谐波。
+      // 音量分层也重排：低音略降、中音略抬，让厚度仍在但不轰。
+      [
+        [55.0, 0.46], [82.41, 0.30], [110.0, 0.15],
+        [164.81, 0.075], [220.0, 0.045],
+      ].forEach(([f, base], i) => {
         const o = ctx.createOscillator();
-        o.type = i < 2 ? 'sine' : 'triangle';
+        o.type = 'sine';
         o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
         const g = ctx.createGain();
-        const base = (i < 2 ? 0.55 : 0.14) / (i + 1);
         g.gain.value = base;
-        lfo(ctx, 0.03 + i * 0.017, base * 0.6, g.gain);   // 极慢的音量呼吸
-        o.connect(g).connect(filt);
+        lfo(ctx, 0.03 + i * 0.017, base * 0.5, g.gain);   // 极慢的音量呼吸
+        o.connect(g).connect(cut1);
         o.start();
       });
 
       // 空气：带通噪声，缓慢起伏
       const air = ctx.createGain();
-      air.gain.value = 0.055;
-      lfo(ctx, 0.045, 0.035, air.gain);
+      air.gain.value = 0.042;
+      lfo(ctx, 0.045, 0.026, air.gain);
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.frequency.value = 1300;
-      bp.Q.value = 0.35;
+      bp.frequency.value = 820;      // 原 1300Hz 偏嘶；降下来更像远处空气
+      bp.Q.value = 0.5;
       loopNoise(ctx, pinkBuffer(ctx, 6)).connect(bp).connect(air).connect(out);
 
       // 颂钵：反馈延迟做长余韵，随机触发
@@ -2627,24 +2638,26 @@ body.is-calm .glow { opacity: 0.35 !important; }
       const strike = () => {
         if (!ac || ac.state !== 'running') return;
         const t0 = ac.currentTime + Math.random() * 0.6;
-        const base = [523.25, 587.33, 659.25, 783.99][(Math.random() * 4) | 0];
+        // 音高整体下调一个八度内：原来最高到 784Hz，泛音很容易尖
+        const base = [392.00, 440.00, 493.88, 587.33][(Math.random() * 4) | 0];
         const g = ac.createGain();
         g.gain.setValueAtTime(0, t0);
-        g.gain.linearRampToValueAtTime(0.075, t0 + 0.35);
+        g.gain.linearRampToValueAtTime(0.055, t0 + 0.35);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + 6.5);
         g.connect(bellBus);
+        // 泛音幅度下调：4.12 倍那个原来约 880Hz×4.12≈3.6kHz，最刺
         [1, 2.004, 2.98, 4.12].forEach((m, i) => {
           const o = ac.createOscillator();
           o.type = 'sine';
           o.frequency.value = base * m;
           const og = ac.createGain();
-          og.gain.value = [1, 0.42, 0.24, 0.12][i];
+          og.gain.value = [1, 0.30, 0.13, 0.045][i];
           o.connect(og).connect(g);
           o.start(t0);
           o.stop(t0 + 7);
         });
       };
-      every(strike, 12.5);
+      every(strike, 17);
       later(strike, 1200);          // 开起来先响一声，确认「有声音了」
     }
 
