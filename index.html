@@ -270,6 +270,9 @@ body {
   color: var(--ink-dim);
 }
 
+.hint-set { display: contents; }              /* 默认让内部元素直接参与 flex 布局 */
+.hint-set--touch { display: none; }          /* 触摸版默认隐藏 */
+
 .hint-item { display: inline-flex; align-items: center; gap: 8px; }
 .hint-sep { width: 1px; height: 11px; background: var(--line); }
 
@@ -286,6 +289,10 @@ body {
 
 .ico--move {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8c8ff' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3'/%3E%3C/svg%3E");
+}
+
+.ico--hold {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8c8ff' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M9 11V5.6a1.8 1.8 0 0 1 3.6 0V11'/%3E%3Cpath d='M12.6 11V9.4a1.7 1.7 0 0 1 3.4 0V11'/%3E%3Cpath d='M16 11.4a1.7 1.7 0 0 1 3.4 0v3.9c0 3.4-2.4 5.7-5.8 5.7h-1.3c-2 0-3.2-.8-4.3-2.3l-3-4.2a1.7 1.7 0 0 1 2.5-2.2L9 14'/%3E%3C/svg%3E");
 }
 
 .ico--click {
@@ -645,8 +652,12 @@ body.is-calm .glow { opacity: 0.35 !important; }
 }
 
 @media (max-width: 560px) {
-  .hint { flex-direction: column; align-items: flex-start; gap: 8px; }
+  /* 提示：三行分开，行距拉开，别挤成一坨 */
+  .hint { gap: 0; margin-top: clamp(22px, 4vh, 32px); }
   .hint-sep { display: none; }
+  .hint-set--touch { gap: 11px; }
+  .hint-item { font-size: 13px; line-height: 1.5; }
+  .ico { width: 14px; height: 14px; }
   .glow { display: none; }
 
   .title { font-size: min(clamp(2rem, 9.2vw, 2.9rem), calc((100vw - 40px) / 7.35)); }
@@ -667,9 +678,12 @@ body.is-calm .glow { opacity: 0.35 !important; }
   .quiet-note { font-size: 12.5px; }
 }
 
-/* 触屏设备：无需光标光晕 */
+/* 触屏设备：换用触摸版提示（鼠标版的「移动光标」在手机上说不通），
+   同时隐藏光标光晕 —— 手指没有悬停概念 */
 @media (hover: none) {
   .glow { display: none; }
+  .hint-set--pointer { display: none; }
+  .hint-set--touch { display: flex; flex-direction: column; gap: 10px; }
 }
 
 /* ---------- 无障碍：尊重系统的减弱动效 ---------- */
@@ -795,6 +809,10 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
   const FINE_POINTER = window.matchMedia('(hover: hover) and (pointer: fine)');
+  // 触屏上禁止「横向过度滚动」：否则双指缩放时页面会跟着左右弹动
+  if (!FINE_POINTER.matches) {
+    document.documentElement.style.overscrollBehaviorX = 'none';
+  }
 
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -898,6 +916,11 @@ body.is-calm .glow { opacity: 0.35 !important; }
     bursts: [],
     meteors: [],
     nextMeteor: 2.5,
+    // 移动端交互
+    skyZoom: 1,          // 双指缩放：只作用于星空的视口缩放
+    gather: false,       // 长按中：星尘向内凝聚
+    gatherX: 0, gatherY: 0,
+    gatherT: 0,
   };
 
   /* ---------- 发光贴图（预渲染，避免逐帧建径向渐变） ---------- */
@@ -1772,7 +1795,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
     cursor.py = cursor.y;
   }
 
-  function drawCursor() {
+  function drawCursor(dt) {
     if (cursor.x < -9000) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -1791,6 +1814,38 @@ body.is-calm .glow { opacity: 0.35 !important; }
       ctx.arc(p.x, p.y, p.r * (0.5 + a * 0.6), 0, TAU);
       ctx.fill();
     }
+
+    /* 长按凝聚：一圈星尘向内盘旋收拢 ——
+       每颗用「当前角度 + 半径」描述，半径随时间收缩、角度随时间旋转，
+       于是看上去是螺旋收进来的，而不是直线撞向中心。 */
+    if (state.gather) {
+      state.gatherT += dt;
+      const cx = state.gatherX, cy = state.gatherY;
+      const N = 24;
+      for (let i = 0; i < N; i++) {
+        const p0 = (i / N) * Math.PI * 2;
+        const phase = (state.gatherT * 1.5 + i * 0.13) % 1;      // 0→1 循环
+        const r = 90 * (1 - phase) + 6;
+        const ang = p0 + state.gatherT * 2.2 + phase * 3.4;      // 边收边转
+        const x = cx + Math.cos(ang) * r;
+        const y = cy + Math.sin(ang) * r * 0.92;
+        const a = Math.sin(phase * Math.PI) * 0.9;               // 两端淡出
+        const sz = 3 + (1 - phase) * 7;
+        ctx.globalAlpha = a * 0.55;
+        ctx.drawImage(glowSprites[7], x - sz / 2, y - sz / 2, sz, sz);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = i % 3 === 0 ? '#fff4d8' : '#eaf2ff';
+        ctx.beginPath();
+        ctx.arc(x, y, 1 + (1 - phase) * 1.6, 0, TAU);
+        ctx.fill();
+      }
+      // 核心随凝聚时间越来越亮
+      const pulse = 0.5 + 0.5 * Math.sin(state.gatherT * 7);
+      const core = 26 + pulse * 14;
+      ctx.globalAlpha = 0.34 + pulse * 0.24;
+      ctx.drawImage(halo, cx - core, cy - core, core * 2, core * 2);
+    }
+
 
     // 涟漪：快速移动时留下的扩散圆环
     for (const r of cursor.ripples) {
@@ -2055,7 +2110,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
       drawMeteors(dt);
     }
     drawBursts(dt);
-    if (!state.calm) drawCursor();   // 触屏同样绘制：指尖即光标
+    if (!state.calm) drawCursor(dt);   // 触屏同样绘制：指尖即光标
   }
 
   /* ---------- 输入 ---------- */
@@ -2097,16 +2152,105 @@ body.is-calm .glow { opacity: 0.35 !important; }
   }
 
   // 触摸端：拖动即视差
-  function onTouchMove(e) {
+  /* ---------- 移动端手势 ----------
+     双指：缩放星空（只改星空的视口缩放，不动内容排版）
+     长按：星尘向内凝聚，松手时散开
+     单指：指尖即光标（拖尾 + 点亮附近的星）
+     摇一摇：换一个视角（见 onMotion） */
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let longPressTimer = 0;
+  let lastTouchPos = { x: 0, y: 0 };
+
+  const touchDist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+  function cancelLongPress() {
+    clearTimeout(longPressTimer);
+    longPressTimer = 0;
+    state.gather = false;      // 凝聚的星尘散开（粒子会自然外扩）
+  }
+
+  function onTouchStart(e) {
+    if (e.touches.length >= 2) {
+      cancelLongPress();       // 变成双指 → 转入缩放，不再长按
+      pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+      pinchStartZoom = state.skyZoom || 1;
+      return;
+    }
     const t = e.touches[0];
     if (!t) return;
     onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+    lastTouchPos = { x: t.clientX, y: t.clientY };
+    // 按住 320ms 不动 → 开始凝聚星尘
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      state.gather = true;
+      state.gatherX = lastTouchPos.x;
+      state.gatherY = lastTouchPos.y;
+      state.gatherT = 0;
+    }, 320);
   }
-  // 触摸时把「光标」当作指尖，交互反馈同样生效
-  window.addEventListener('touchstart', (e) => {
+
+  function onTouchMove(e) {
+    if (e.touches.length >= 2) {
+      if (!pinchStartDist) {
+        pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+        pinchStartZoom = state.skyZoom || 1;
+        return;
+      }
+      const d = touchDist(e.touches[0], e.touches[1]);
+      // 两指间距翻倍 ≈ 放大 2 倍；限制在 1~2.6，避免缩小后露出画布边缘
+      state.skyZoom = clamp(pinchStartZoom * (d / pinchStartDist), 1, 2.6);
+      scaleRaf = requestAnimationFrame(applyComposeScale);
+      return;
+    }
     const t = e.touches[0];
-    if (t) onPointerMove({ clientX: t.clientX, clientY: t.clientY });
-  }, { passive: true });
+    if (!t) return;
+    onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+    if (state.gather) {
+      state.gatherX = t.clientX;   // 凝聚时用手指带着这团星尘走
+      state.gatherY = t.clientY;
+    } else {
+      cancelLongPress();           // 有移动就不算长按
+    }
+    lastTouchPos = { x: t.clientX, y: t.clientY };
+  }
+
+  function onTouchEnd(e) {
+    if (e.touches && e.touches.length >= 1) return;   // 还有手指按着
+    pinchStartDist = 0;
+    cancelLongPress();
+  }
+
+  window.addEventListener('touchstart', onTouchStart, { passive: true });
+  window.addEventListener('touchmove', onTouchMove, { passive: true });
+  window.addEventListener('touchend', onTouchEnd, { passive: true });
+  window.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+  /* ---------- 摇一摇：换一个视角 ----------
+     轻转银河倾角 + 撒两颗流星，让同一片星空偶尔换个模样，
+     但不会陌生到认不出。 */
+  let lastMotion = 0;
+  let shakeCool = 0;
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity;
+    if (!a || a.x == null) return;
+    const now = performance.now();
+    if (now - lastMotion < 110) return;         // 节流
+    lastMotion = now;
+    if (Math.hypot(a.x, a.y, a.z) > 26 && now - shakeCool > 2500) {
+      shakeCool = now;
+      shakeView();
+    }
+  }
+  function shakeView() {
+    MW.angle = clamp((MW.angle || -27) + rand(-8, 8), -42, -13);
+    galaxy.init(neb.size || 800);              // 按新倾角重建银河几何
+    neb.last = -1;                             // 强制下一帧重绘银河
+    spawnMeteor(false);
+    setTimeout(() => spawnMeteor(Math.random() < 0.4), 180);
+  }
+  window.addEventListener('devicemotion', onMotion);
 
   // 陀螺仪（移动端轻微视差）
   function onOrientation(e) {
@@ -2125,6 +2269,23 @@ body.is-calm .glow { opacity: 0.35 !important; }
   document.addEventListener('pointerleave', onPointerLeave);
   window.addEventListener('touchmove', onTouchMove, { passive: true });
   window.addEventListener('deviceorientation', onOrientation);
+
+  // iOS 13+ 必须在「用户手势」里显式申请，否则拿不到方向/加速度数据。
+  // 第一次触摸或点击时问一次；拒绝也不影响其它交互。
+  function requestMotionPermission() {
+    const D = window.DeviceOrientationEvent;
+    const M = window.DeviceMotionEvent;
+    const asks = [];
+    if (D && typeof D.requestPermission === 'function') asks.push(D.requestPermission());
+    if (M && typeof M.requestPermission === 'function') asks.push(M.requestPermission());
+    if (!asks.length) { state.motionOK = true; return; }
+    Promise.all(asks.map((q) => q.catch(() => 'denied'))).then((res) => {
+      state.motionOK = res.includes('granted');
+    });
+  }
+  ['touchend', 'click'].forEach((ev) => {
+    window.addEventListener(ev, requestMotionPermission, { once: true, passive: true });
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       state.running = false;
@@ -2479,8 +2640,13 @@ body.is-calm .glow { opacity: 0.35 !important; }
       stage.style.marginBottom = 'calc(100svh * ' + (scale - 1) + ')';
     }
     // 星空跟随放大，但上限小一些（可视面积变大会增加合成开销）
-    const skyScale = Math.min(1.32, Math.max(1, vw / 900));
-    if (sky) sky.style.transform = 'scale(' + skyScale + ') translateZ(0)';
+    // 双指缩放叠加在基础缩放之上：state.skyZoom 由手势写入（1 表示未缩放）
+    const base = Math.min(1.32, Math.max(1, vw / 900));
+    const skyScale = base * (state.skyZoom || 1);
+    if (sky) {
+      sky.style.transform = 'scale(' + skyScale.toFixed(4) + ') translateZ(0)';
+      sky.style.transformOrigin = '50% 50%';
+    }
     scaleState.scale = scale;
     scaleState.skyScale = skyScale;
   }
