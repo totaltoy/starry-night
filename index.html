@@ -2,7 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="starry-build" content="1001-2140·601260" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>星野 · 今夜只听星光</title>
 <meta name="theme-color" content="#03040d" />
 <meta name="description" content="一片会呼吸的星空。今夜只听星光，不必赶去哪里。" />
@@ -3002,6 +3003,18 @@ body.is-calm .glow { opacity: 0.35 !important; }
       get scapes() { return Object.entries(SCAPES).map(([k, v]) => ({ key: k, label: v.label })); },
       // 仅供自动化检查读取各声景的构建函数，运行时逻辑不依赖它
       get _src() { return SCAPES_SRC; },
+      // 供 ?diag=1 面板显示当前音频状态
+      _diag() {
+        return {
+          ctx: ac ? ac.state : '(未创建)',
+          on,
+          key: currentKey || '(无)',
+          scapes: Object.keys(SCAPES).length,
+          master: master ? master.gain.value.toFixed(3) : '-',
+          vol: (this._vol == null ? 0.7 : this._vol).toFixed(2),
+          limiter: !!(master && master.numberOfOutputs != null && ac && ac.createDynamicsCompressor),
+        };
+      },
 
       // 开启 / 关闭。key 省略则沿用当前声景（默认第一个）
       async toggle(want, key, volume) {
@@ -3328,7 +3341,13 @@ body.is-calm .glow { opacity: 0.35 !important; }
       const sk = sky.getBoundingClientRect();
       const or = orb.getBoundingClientRect();
       const t = document.getElementById('breathText');
+      const meta = document.querySelector('meta[name="starry-build"]');
+      const build = meta ? meta.getAttribute('content') : '(无)';
+      const d = Sound._diag();
       box.textContent = [
+        `建构版本  ${build}`,
+        `声景      已注册 ${d.scapes} 种   当前 ${d.key}   开关 ${d.on ? '开' : '关'}`,
+        `音频      ctx=${d.ctx}  master=${d.master}  音量=${d.vol}  限幅=${d.limiter ? '有' : '无'}`,
         `视口      ${vw} × ${window.innerHeight}   dpr=${window.devicePixelRatio}`,
         `--scale   ${cs.getPropertyValue('--scale').trim()}`,
         `--sky-scale ${cs.getPropertyValue('--sky-scale').trim()}`,
