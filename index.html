@@ -604,6 +604,137 @@ body {
   animation: fade-in 1.2s var(--ease) both;
 }
 
+/* ---------- 声音面板 ---------- */
+.snd { position: relative; }
+
+.snd-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  z-index: 20;
+  width: max-content;
+  min-width: 250px;
+  max-width: min(84vw, 320px);
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 206, 255, 0.2);
+  background: rgba(6, 9, 20, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  animation: snd-in 0.32s var(--ease) both;
+}
+.snd-panel[hidden] { display: none; }
+
+@keyframes snd-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.snd-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--ink-faint);
+}
+
+.snd-list { display: flex; flex-direction: column; gap: 2px; }
+
+.snd-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink-dim);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.3s var(--ease), color 0.3s var(--ease),
+              border-color 0.3s var(--ease);
+}
+.snd-item:hover { background: rgba(180, 206, 255, 0.07); color: var(--ink); }
+.snd-item[aria-checked="true"] {
+  background: rgba(168, 200, 255, 0.12);
+  border-color: rgba(168, 200, 255, 0.34);
+  color: var(--ink);
+}
+.snd-name { font-size: 13px; font-weight: 500; }
+.snd-desc { font-size: 11px; color: var(--ink-faint); }
+.snd-item[aria-checked="true"] .snd-desc { color: rgba(232, 238, 252, 0.5); }
+
+.snd-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.snd-row-label { flex: none; width: 2.4em; letter-spacing: 0.1em; }
+
+.snd-range {
+  flex: 1 1 auto;
+  min-width: 90px;
+  height: 22px;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.snd-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(180, 206, 255, 0.22);
+}
+.snd-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #cfe3ff;
+  box-shadow: 0 0 10px rgba(190, 216, 255, 0.7);
+}
+.snd-range::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(180, 206, 255, 0.22);
+}
+.snd-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: none;
+  border-radius: 50%;
+  background: #cfe3ff;
+}
+
+.snd-select {
+  flex: 1 1 auto;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(180, 206, 255, 0.22);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.snd-select:focus { outline: none; border-color: rgba(168, 200, 255, 0.55); }
+.snd-select option { background: #0a0f1e; color: #e8eefc; }
+
+.snd-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
 /* 静默模式：文案更收敛 */
 body.is-calm .title {
   text-shadow: none;
@@ -611,6 +742,7 @@ body.is-calm .title {
   transition: color 1.2s var(--ease), text-shadow 1.2s var(--ease);
 }
 body.is-calm .dawn { opacity: 0.22; transition: opacity 1.2s var(--ease); }
+body.is-calm .snd-panel { background: rgba(6, 9, 20, 0.96); }
 body.is-calm .glow { opacity: 0.35 !important; }
 
 /* ---------- 入场动画 ---------- */
@@ -673,6 +805,11 @@ body.is-calm .glow { opacity: 0.35 !important; }
     letter-spacing: 0.08em;
     gap: 10px;
   }
+  .snd-panel { min-width: min(84vw, 300px); padding: 14px 16px; }
+  .snd-item { padding: 10px 12px; }
+  .snd-range { height: 30px; }
+  .snd-range::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -8px; }
+  .snd-select { padding: 8px 10px; font-size: 13px; }
   .controls { gap: 12px; }
   .btn-led { width: 7px; height: 7px; }
   .quiet-note { font-size: 12.5px; }
@@ -787,10 +924,54 @@ body.is-calm .glow { opacity: 0.35 !important; }
       <blockquote>我们都在同一片夜空下，只是看见的星星不同。</blockquote>
 
       <div class="controls" role="group" aria-label="页面控制">
-        <button class="btn" id="soundBtn" type="button" aria-pressed="false">
-          <span class="btn-led" aria-hidden="true"></span>
-          <span class="btn-label">开启环境音</span>
-        </button>
+        <!-- 声音：主开关 + 展开面板（声景列表 / 音量 / 定时关闭） -->
+        <div class="snd">
+          <button class="btn" id="soundBtn" type="button"
+                  aria-pressed="false" aria-expanded="false" aria-controls="soundPanel">
+            <span class="btn-led" aria-hidden="true"></span>
+            <span class="btn-label">开启环境音</span>
+          </button>
+
+          <div class="snd-panel" id="soundPanel" hidden>
+            <p class="snd-title">声景</p>
+            <div class="snd-list" role="radiogroup" aria-label="选择声景">
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="drone">
+                <span class="snd-name">深空</span><span class="snd-desc">低频垫音与颂钵</span>
+              </button>
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="rain">
+                <span class="snd-name">雨</span><span class="snd-desc">雨幕与远雷</span>
+              </button>
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="waves">
+                <span class="snd-name">海浪</span><span class="snd-desc">缓慢的潮涌</span>
+              </button>
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="fire">
+                <span class="snd-name">篝火</span><span class="snd-desc">闷响与爆裂声</span>
+              </button>
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="forest">
+                <span class="snd-name">森林夜</span><span class="snd-desc">风声与虫鸣</span>
+              </button>
+            </div>
+
+            <label class="snd-row">
+              <span class="snd-row-label">音量</span>
+              <input class="snd-range" id="sndVol" type="range"
+                     min="0" max="100" value="70" aria-label="音量" />
+            </label>
+
+            <label class="snd-row">
+              <span class="snd-row-label">定时</span>
+              <select class="snd-select" id="sndTimer" aria-label="定时关闭">
+                <option value="0">不关闭</option>
+                <option value="15">15 分钟</option>
+                <option value="30">30 分钟</option>
+                <option value="60">60 分钟</option>
+              </select>
+            </label>
+
+            <p class="snd-note" id="sndNote" hidden></p>
+          </div>
+        </div>
+
         <span class="ctrl-sep" aria-hidden="true"></span>
         <button class="btn" id="calmBtn" type="button" aria-pressed="false">
           <span class="btn-led" aria-hidden="true"></span>
@@ -2308,18 +2489,59 @@ body.is-calm .glow { opacity: 0.35 !important; }
     if (!e.target.closest('blockquote')) e.preventDefault();
   });
 
-  /* ---------- 环境音（Web Audio 合成，无需音频文件） ---------- */
-  const Sound = (() => {
-    let ac = null, master = null, started = false, nodes = null;
+  /* =========================================================
+     环境音：五种可切换的「声景」，全部用 Web Audio 实时合成，无音频文件。
 
-    function noiseBuffer(ctx, seconds) {
+     结构：
+       声景各自一条链 → scape.gain → master → destination
+       切换声景时把 master 淡出 → 拆掉旧链 → 建新链 → 淡入
+       （用统一淡入淡出而不是并行交叉淡化：更省节点，听感也够平滑）
+
+     五种声景的合成长相：
+       深空   低频垫音（5 个失谐正弦过 LFO 低通）+ 空气噪声 + 偶发颂钵泛音
+       雨     棕噪声过 1.5kHz 低通做雨幕 + 随机雨滴点 + 偶发远雷
+       海浪   噪声过共振低通，用两个不同频率的 LFO 同时扫音量与截止频率
+       篝火   低频闷响铺底 + 随机爆裂声（窄带高频噪声短脉冲）
+       森林夜 柔和风声 + 随机虫鸣（每声 0.15s，成组出现）
+     ========================================================= */
+  const Sound = (() => {
+    let ac = null;
+    let master = null;
+    let scape = null;             // 当前声景：{ gain, stop, nodes }
+    let currentKey = null;
+    let on = false;
+    let starting = false;
+    const timers = new Set();     // 所有 setTimeout / setInterval，切换时统一清掉
+
+    const MASTER_PEAK = 0.85;     // 主音量上限（避免削顶，单个声景内部已控制峰值）
+
+    /* ---------- 工具 ---------- */
+    const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
+    const every = (fn, ms) => { const id = setInterval(fn, ms); timers.add(id); return id; };
+    const clearTimers = () => { for (const id of timers) { clearTimeout(id); clearInterval(id); } timers.clear(); };
+
+    // 棕噪声：比粉噪声更低沉，适合雨幕与海浪
+    function brownBuffer(ctx, seconds) {
+      const len = Math.floor(ctx.sampleRate * seconds);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        last = (last + 0.02 * w) / 1.02;
+        d[i] = last * 3.2;
+      }
+      return buf;
+    }
+
+    // 粉噪声近似：高频更少，用作空气感与风
+    function pinkBuffer(ctx, seconds) {
       const len = Math.floor(ctx.sampleRate * seconds);
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
       const d = buf.getChannelData(0);
       let b0 = 0, b1 = 0, b2 = 0;
       for (let i = 0; i < len; i++) {
         const w = Math.random() * 2 - 1;
-        // 粉噪声近似
         b0 = 0.99765 * b0 + w * 0.0990460;
         b1 = 0.96300 * b1 + w * 0.2965164;
         b2 = 0.57000 * b2 + w * 1.0526913;
@@ -2328,79 +2550,82 @@ body.is-calm .glow { opacity: 0.35 !important; }
       return buf;
     }
 
-    function build() {
-      const ctx = ac;
-      const out = ctx.createGain();
-      out.gain.value = 0;
-      out.connect(ctx.destination);
+    const loopNoise = (ctx, buffer) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.start();
+      return src;
+    };
 
-      // — 低频垫音（温暖的 Drone）
-      const pad = ctx.createGain();
-      pad.gain.value = 0.30;
+    const osc = (ctx, type, freq, gain, dest) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = freq;
+      if (gain != null) { const g = ctx.createGain(); g.gain.value = gain; o.connect(g).connect(dest); }
+      else o.connect(dest);
+      o.start();
+      return o;
+    };
+
+    // 慢速 LFO → 参数
+    const lfo = (ctx, freq, amount, param, type = 'sine') => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.value = amount;
+      o.connect(g).connect(param);
+      o.start();
+      return o;
+    };
+
+    /* ---------- 深空：低频垫音 + 空气 + 颂钵 ---------- */
+    function drone(ctx, out) {
       const filt = ctx.createBiquadFilter();
       filt.type = 'lowpass';
       filt.frequency.value = 760;
       filt.Q.value = 0.6;
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.06;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 240;
-      lfo.connect(lfoGain).connect(filt.frequency);
-      lfo.start();
-      filt.connect(pad).connect(out);
+      lfo(ctx, 0.06, 240, filt.frequency);
+      filt.connect(out);
 
       [55.0, 82.41, 110.0, 164.81, 220.0].forEach((f, i) => {
         const o = ctx.createOscillator();
         o.type = i < 2 ? 'sine' : 'triangle';
         o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
         const g = ctx.createGain();
-        g.gain.value = (i < 2 ? 0.55 : 0.14) / (i + 1);
-        // 极慢的音量呼吸
-        const fl = ctx.createOscillator();
-        fl.frequency.value = 0.03 + i * 0.017;
-        const fg = ctx.createGain();
-        fg.gain.value = g.gain.value * 0.6;
-        fl.connect(fg).connect(g.gain);
-        fl.start();
+        const base = (i < 2 ? 0.55 : 0.14) / (i + 1);
+        g.gain.value = base;
+        lfo(ctx, 0.03 + i * 0.017, base * 0.6, g.gain);   // 极慢的音量呼吸
         o.connect(g).connect(filt);
         o.start();
       });
 
-      // — 空气感：滤波噪声，缓慢起伏
-      const src = ctx.createBufferSource();
-      src.buffer = noiseBuffer(ctx, 6);
-      src.loop = true;
+      // 空气：带通噪声，缓慢起伏
+      const air = ctx.createGain();
+      air.gain.value = 0.055;
+      lfo(ctx, 0.045, 0.035, air.gain);
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
       bp.frequency.value = 1300;
       bp.Q.value = 0.35;
-      const air = ctx.createGain();
-      air.gain.value = 0.055;
-      const airLfo = ctx.createOscillator();
-      airLfo.frequency.value = 0.045;
-      const airLfoGain = ctx.createGain();
-      airLfoGain.gain.value = 0.035;
-      airLfo.connect(airLfoGain).connect(air.gain);
-      airLfo.start();
-      src.connect(bp).connect(air).connect(out);
-      src.start();
+      loopNoise(ctx, pinkBuffer(ctx, 6)).connect(bp).connect(air).connect(out);
 
-      // — 偶发的颂钵泛音
+      // 颂钵：反馈延迟做长余韵，随机触发
       const bellBus = ctx.createGain();
       bellBus.gain.value = 0.5;
-      const bellDelay = ctx.createDelay(2.5);
-      bellDelay.delayTime.value = 1.6;
-      const bellFb = ctx.createGain();
-      bellFb.gain.value = 0.42;
-      const bellLp = ctx.createBiquadFilter();
-      bellLp.type = 'lowpass';
-      bellLp.frequency.value = 2400;
-      bellBus.connect(bellLp).connect(bellDelay).connect(bellFb).connect(bellDelay);
-      bellLp.connect(out);
+      const delay = ctx.createDelay(2.5);
+      delay.delayTime.value = 1.6;
+      const fb = ctx.createGain();
+      fb.gain.value = 0.42;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2400;
+      bellBus.connect(lp).connect(delay).connect(fb).connect(delay);
+      lp.connect(out);
 
-      const bellTimer = setInterval(() => {
+      const strike = () => {
         if (!ac || ac.state !== 'running') return;
-        if (Math.random() < 0.45) return;
         const t0 = ac.currentTime + Math.random() * 0.6;
         const base = [523.25, 587.33, 659.25, 783.99][(Math.random() * 4) | 0];
         const g = ac.createGain();
@@ -2408,43 +2633,306 @@ body.is-calm .glow { opacity: 0.35 !important; }
         g.gain.linearRampToValueAtTime(0.075, t0 + 0.35);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + 6.5);
         g.connect(bellBus);
-        [1, 2.004, 2.98, 4.12].forEach((mult, i) => {
+        [1, 2.004, 2.98, 4.12].forEach((m, i) => {
           const o = ac.createOscillator();
           o.type = 'sine';
-          o.frequency.value = base * mult;
+          o.frequency.value = base * m;
           const og = ac.createGain();
           og.gain.value = [1, 0.42, 0.24, 0.12][i];
           o.connect(og).connect(g);
           o.start(t0);
           o.stop(t0 + 7);
         });
-      }, 6500);
-
-      nodes = { out, src, bellTimer };
-      started = true;
+      };
+      every(strike, 12.5);
+      later(strike, 1200);          // 开起来先响一声，确认「有声音了」
     }
 
-    return {
-      async toggle(on) {
-        if (!ac) {
-          const AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return false;
-          ac = new AC();
+    /* ---------- 雨：雨幕 + 雨滴 + 远雷 ---------- */
+    function rain(ctx, out) {
+      const bed = ctx.createBiquadFilter();
+      bed.type = 'lowpass';
+      bed.frequency.value = 1500;
+      bed.Q.value = 0.3;
+      lfo(ctx, 0.05, 220, bed.frequency);      // 雨势有缓急
+      bed.connect(out);
+      const bedGain = ctx.createGain();
+      bedGain.gain.value = 0.72;
+      bedGain.connect(bed);
+      loopNoise(ctx, brownBuffer(ctx, 8)).connect(bedGain);
+
+      const drop = () => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + Math.random() * 0.5;
+        const o = ac.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(rand(900, 2600), t0);
+        o.frequency.exponentialRampToValueAtTime(rand(420, 900), t0 + 0.06);
+        const g = ac.createGain();
+        const peak = rand(0.014, 0.05);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(peak, t0 + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+        o.connect(g).connect(out);
+        o.start(t0);
+        o.stop(t0 + 0.12);
+      };
+      // 用递归调度而不是高频 setInterval：听起来更自然
+      const rainLoop = () => {
+        drop();
+        if (Math.random() < 0.35) later(drop, rand(40, 130));
+        later(rainLoop, rand(60, 240));
+      };
+      rainLoop();
+
+      const thunder = () => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + rand(0.5, 2.5);
+        const ng = ac.createGain();
+        ng.gain.setValueAtTime(0, t0);
+        ng.gain.linearRampToValueAtTime(0.34, t0 + 1.5);
+        ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 5.5);
+        const nf = ac.createBiquadFilter();
+        nf.type = 'lowpass';
+        nf.frequency.value = 160;
+        nf.Q.value = 1.6;
+        const s = ac.createBufferSource();
+        s.buffer = brownBuffer(ac, 7);
+        s.loop = true;
+        s.connect(nf).connect(ng).connect(out);
+        s.start(t0);
+        s.stop(t0 + 7);
+      };
+      every(thunder, 46000);
+      later(thunder, 16000);          // 第一声远雷不用等太久
+    }
+
+    /* ---------- 海浪：两个 LFO 同时扫音量与截止频率 ---------- */
+    function waves(ctx, out) {
+      const bed = ctx.createGain();
+      bed.gain.value = 0.34;                       // 基准，LFO 在其上起伏
+      const sw1 = ctx.createGain();
+      sw1.gain.value = 1;
+      bed.connect(sw1).connect(out);
+      lfo(ctx, 0.075, 0.52, sw1.gain);             // 慢潮涌
+      lfo(ctx, 0.113, 0.16, sw1.gain);             // 叠加一个不同周期，避免机械感
+
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 520;
+      f.Q.value = 0.9;
+      lfo(ctx, 0.075, 300, f.frequency);           // 浪峰时高频更亮
+      f.connect(bed);
+      loopNoise(ctx, brownBuffer(ctx, 9)).connect(f);
+
+      // 浪尖的细碎白噪：另走一路带通，音量更小、周期错开
+      const foam = ctx.createGain();
+      foam.gain.value = 0.05;
+      const sw2 = ctx.createGain();
+      sw2.gain.value = 1;
+      foam.connect(sw2).connect(out);
+      lfo(ctx, 0.075, 0.9, sw2.gain);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2100;
+      bp.Q.value = 0.7;
+      loopNoise(ctx, pinkBuffer(ctx, 7)).connect(bp).connect(foam);
+    }
+
+    /* ---------- 篝火：闷响铺底 + 随机爆裂 ---------- */
+    function fire(ctx, out) {
+      const rumble = ctx.createBiquadFilter();
+      rumble.type = 'lowpass';
+      rumble.frequency.value = 240;
+      rumble.Q.value = 0.5;
+      lfo(ctx, 0.16, 70, rumble.frequency);
+      rumble.connect(out);
+      const rg = ctx.createGain();
+      rg.gain.value = 0.72;
+      rg.connect(rumble);
+      loopNoise(ctx, brownBuffer(ctx, 7)).connect(rg);
+
+      const crackle = () => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + Math.random() * 0.25;
+        const g = ac.createGain();
+        const peak = Math.random() < 0.12 ? rand(0.11, 0.2) : rand(0.025, 0.09);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(peak, t0 + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + rand(0.03, 0.16));
+        const bp = ac.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = rand(1500, 4600);
+        bp.Q.value = rand(1.2, 3.4);
+        const s = ac.createBufferSource();
+        s.buffer = pinkBuffer(ac, 1);
+        s.loop = true;
+        s.connect(bp).connect(g).connect(out);
+        s.start(t0);
+        s.stop(t0 + 0.25);
+      };
+      const fireLoop = () => {
+        // 成簇出现：几声挨得近，然后安静一会儿
+        const burst = 1 + ((Math.random() * 4) | 0);
+        for (let i = 0; i < burst; i++) later(crackle, i * rand(28, 90));
+        later(fireLoop, rand(120, 700));
+      };
+      fireLoop();
+      // 偶尔来一声大一点的「啪」
+      every(() => { if (Math.random() < 0.5) later(crackle, rand(0, 300)); }, 6500);
+    }
+
+    /* ---------- 森林夜：风声 + 虫鸣 ---------- */
+    function forest(ctx, out) {
+      const wind = ctx.createGain();
+      wind.gain.value = 0.3;
+      lfo(ctx, 0.05, 0.16, wind.gain);
+      lfo(ctx, 0.087, 0.07, wind.gain);
+      wind.connect(out);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 900;
+      lp.connect(wind);
+      loopNoise(ctx, brownBuffer(ctx, 8)).connect(lp);
+
+      const chirp = () => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + Math.random() * 0.2;
+        const base = rand(3600, 5200);
+        const n = 2 + ((Math.random() * 3) | 0);
+        for (let i = 0; i < n; i++) {
+          const st = t0 + i * rand(0.07, 0.15);
+          const o = ac.createOscillator();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(base, st);
+          o.frequency.exponentialRampToValueAtTime(base * rand(1.02, 1.12), st + 0.05);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, st);
+          g.gain.linearRampToValueAtTime(rand(0.012, 0.03), st + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.12);
+          o.connect(g).connect(out);
+          o.start(st);
+          o.stop(st + 0.16);
         }
-        if (ac.state === 'suspended') await ac.resume();
-        if (!started) build();
-        const now = ac.currentTime;
-        const target = on ? 0.5 : 0;
-        nodes.out.gain.cancelScheduledValues(now);
-        nodes.out.gain.setValueAtTime(nodes.out.gain.value, now);
-        nodes.out.gain.linearRampToValueAtTime(target, now + (on ? 4.5 : 1.6));
-        return true;
-      },
+      };
+      const forestLoop = () => {
+        chirp();
+        if (Math.random() < 0.4) later(chirp, rand(500, 1400));
+        later(forestLoop, rand(1800, 5500));
+      };
+      later(forestLoop, rand(800, 2500));
+    }
+
+    // 供自动化检查读取（见 .test/audio-check）：不改运行时行为
+    const SCAPES_SRC = { drone, rain, waves, fire, forest };
+    const SCAPES = {
+      drone:  { label: '深空',   build: drone  },
+      rain:   { label: '雨',     build: rain   },
+      waves:  { label: '海浪',   build: waves  },
+      fire:   { label: '篝火',   build: fire   },
+      forest: { label: '森林夜', build: forest },
+    };
+
+    /* ---------- 生命周期 ---------- */
+    function teardown() {
+      clearTimers();
+      if (!scape) return;
+      try { scape.gain.gain.cancelScheduledValues(ac.currentTime); } catch { /* 忽略 */ }
+      try { scape.gain.disconnect(); } catch { /* 忽略 */ }
+      scape = null;
+    }
+
+    function build(key) {
+      const def = SCAPES[key];
+      if (!def) return false;
+      teardown();
+      const g = ac.createGain();
+      g.gain.value = 1;
+      g.connect(master);
+      def.build(ac, g);
+      scape = { key, gain: g };
+      currentKey = key;
+      return true;
+    }
+
+    const fade = (target, seconds) => {
+      const now = ac.currentTime;
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(master.gain.value, now);
+      master.gain.linearRampToValueAtTime(target, now + seconds);
+    };
+
+    return {
       get available() {
         return !!(window.AudioContext || window.webkitAudioContext);
       },
+      get isOn() { return on; },
+      get current() { return currentKey; },
+      get scapes() { return Object.entries(SCAPES).map(([k, v]) => ({ key: k, label: v.label })); },
+      // 仅供自动化检查读取各声景的构建函数，运行时逻辑不依赖它
+      get _src() { return SCAPES_SRC; },
+
+      // 开启 / 关闭。key 省略则沿用当前声景（默认第一个）
+      async toggle(want, key, volume) {
+        if (starting) return on;
+        starting = true;
+        try {
+          if (!ac) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return false;
+            ac = new AC();
+            master = ac.createGain();
+            master.gain.value = 0;
+            master.connect(ac.destination);
+          }
+          if (ac.state === 'suspended') await ac.resume();
+        } finally {
+          starting = false;
+        }
+
+        const target = typeof want === 'boolean' ? want : !on;
+        if (volume != null) this.setVolume(volume);
+
+        if (target) {
+          const k = key || currentKey || 'drone';
+          if (k !== currentKey) build(k);
+          else if (!scape) build(k);
+          // 被截断时给一个下限，避免峰值削顶
+          fade(this._peak(), 3.2);
+          on = true;
+        } else {
+          fade(0, 1.8);
+          on = false;
+          // 淡出结束后再拆节点，避免尾巴被硬切
+          later(() => { if (!on) teardown(); }, 2200);
+        }
+        return on;
+      },
+
+      setVolume(v01) {
+        this._vol = clamp(v01, 0, 1);
+        if (on && master) fade(this._peak(), 0.35);
+      },
+      get volume() { return this._vol == null ? 0.7 : this._vol; },
+
+      _vol: 0.7,
+      // 用平方曲线：滑杆小幅度时变化细腻，符合听感
+      _peak() {
+        const v = this._vol == null ? 0.7 : this._vol;
+        return MASTER_PEAK * v * v;
+      },
+
+      async select(key) {
+        if (!on) return this.toggle(true, key);
+        fade(0, 1.3);
+        await new Promise((r) => later(r, 1400));
+        build(key);
+        fade(this._peak(), 1.6);
+        return true;
+      },
     };
   })();
+
 
   /* ---------- 呼吸引导 ---------- */
   const Breath = (() => {
@@ -2513,22 +3001,128 @@ body.is-calm .glow { opacity: 0.35 !important; }
   })();
 
   /* ---------- 控件 ---------- */
+  /* ---------- 声音控件 ----------
+     主开关负责「开/关」，面板负责「听什么 / 多大声 / 听多久」。
+     设定（声景、音量、定时）存 localStorage，下次打开就沿用。 */
   const soundBtn = document.getElementById('soundBtn');
+  const soundPanel = document.getElementById('soundPanel');
+  const sndItems = [...document.querySelectorAll('.snd-item')];
+  const sndVol = document.getElementById('sndVol');
+  const sndTimer = document.getElementById('sndTimer');
+  const sndNote = document.getElementById('sndNote');
   const calmBtn = document.getElementById('calmBtn');
   const quietNote = document.getElementById('quietNote');
 
-  if (soundBtn) {
-    if (!Sound.available) soundBtn.hidden = true;
+  const PREF = (() => {
+    try { return JSON.parse(localStorage.getItem('starry.pref') || '{}') || {}; }
+    catch { return {}; }
+  })();
+  const savePref = (patch) => {
+    try { localStorage.setItem('starry.pref', JSON.stringify({ ...PREF, ...patch })); }
+    catch { /* 隐私模式下写不了，忽略 */ }
+  };
+
+  let timerId = 0;
+
+  const setSoundLabel = (isOn, key) => {
+    const lbl = soundBtn && soundBtn.querySelector('.btn-label');
+    if (!lbl) return;
+    const name = (Sound.scapes.find((s) => s.key === key) || {}).label;
+    lbl.textContent = isOn ? (name ? name + '声' : '关闭环境音') : '开启环境音';
+  };
+
+  const markCurrent = (key) => {
+    sndItems.forEach((el) => el.setAttribute('aria-checked', String(el.dataset.scape === key)));
+  };
+
+  const note = (text) => {
+    if (!sndNote) return;
+    if (text) { sndNote.textContent = text; sndNote.hidden = false; }
+    else { sndNote.hidden = true; sndNote.textContent = ''; }
+  };
+
+  const applySound = async (want, key) => {
+    const ok = await Sound.toggle(want, key);
+    soundBtn.setAttribute('aria-pressed', String(ok));
+    soundBtn.classList.toggle('is-on', ok);
+    setSoundLabel(ok, Sound.current || key);
+    return ok;
+  };
+
+  if (soundBtn && soundPanel && !Sound.available) {
+    soundBtn.hidden = true;
+    soundPanel.hidden = true;
+  }
+
+  if (soundBtn && soundPanel) {
+    if (sndVol) sndVol.value = String(Math.round(Sound.volume * 100));
+    if (PREF.scape) markCurrent(PREF.scape);
+
     soundBtn.addEventListener('click', async () => {
-      const on = soundBtn.getAttribute('aria-pressed') !== 'true';
-      const ok = await Sound.toggle(on);
-      soundBtn.setAttribute('aria-pressed', String(ok && on));
-      soundBtn.classList.toggle('is-on', ok && on);
-      const lbl = soundBtn.querySelector('.btn-label');
-      if (lbl) lbl.textContent = ok && on ? '关闭环境音' : '开启环境音';
+      const open = soundBtn.getAttribute('aria-expanded') === 'true';
+      soundBtn.setAttribute('aria-expanded', String(!open));
+      soundPanel.hidden = open;
+      if (!open) markCurrent(Sound.current || PREF.scape || 'drone');
       Breath.engage();
     });
+
+    sndItems.forEach((el) => {
+      el.addEventListener('click', async () => {
+        const key = el.dataset.scape;
+        markCurrent(key);
+        savePref({ scape: key });
+        await Sound.select(key);
+        soundBtn.setAttribute('aria-pressed', 'true');
+        soundBtn.classList.add('is-on');
+        setSoundLabel(true, key);
+        if (timerId) startTimer(Number(sndTimer.value));   // 换声景时重置倒计时
+      });
+    });
+
+    if (sndVol) {
+      sndVol.addEventListener('input', () => {
+        const v = Number(sndVol.value) / 100;
+        Sound.setVolume(v);
+        savePref({ vol: v });
+      });
+      // 面板打开时同步一次（可能被别处改过）
+      soundBtn.addEventListener('click', () => {
+        sndVol.value = String(Math.round(Sound.volume * 100));
+      });
+    }
+
+    const startTimer = (minutes) => {
+      clearTimeout(timerId);
+      timerId = 0;
+      note('');
+      if (!minutes) { savePref({ timer: 0 }); return; }
+      savePref({ timer: minutes });
+      const endAt = Date.now() + minutes * 60000;
+      // 到点前 20 秒开始淡出，收尾更柔和
+      const fadeAt = Math.max(0, endAt - Date.now() - 20000);
+      timerId = setTimeout(async () => {
+        if (Sound.isOn) {
+          note('正在淡出…');
+          await applySound(false);
+        }
+        note('定时已结束，声音停止。');
+        if (sndTimer) sndTimer.value = '0';
+        savePref({ timer: 0 });
+        timerId = 0;
+      }, fadeAt);
+      const when = new Date(endAt);
+      note(`将在 ${when.getHours()}:${String(when.getMinutes()).padStart(2, '0')} 淡出停止。`);
+    };
+
+    if (sndTimer) {
+      sndTimer.addEventListener('change', () => {
+        const m = Number(sndTimer.value) || 0;
+        if (m && !Sound.isOn) applySound(true, Sound.current || PREF.scape || 'drone');
+        startTimer(m);
+      });
+    }
   }
+
 
   if (calmBtn) {
     calmBtn.addEventListener('click', () => {
@@ -2567,7 +3161,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
   // 测试用：把内部对象暴露出来，便于自动化检查分层贡献（页面上不会用到）
   if (typeof globalThis !== 'undefined' && globalThis.__EXPOSE__) {
-    globalThis.__DSH_INTERNALS__ = { neb, galaxy, state, seedStars, seedBandStars, seedDust, resize, drawStars, drawNebula, frame };
+    globalThis.__DSH_INTERNALS__ = { neb, galaxy, state, Sound, seedStars, seedBandStars, seedDust, resize, drawStars, drawNebula, frame };
   }
 
   /* ---------- 诊断模式（仅 ?diag=1 时启用，不影响正常使用）----------
