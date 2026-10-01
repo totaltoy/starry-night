@@ -1,0 +1,2448 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>星野 · 今夜只听星光</title>
+<meta name="theme-color" content="#03040d" />
+<meta name="description" content="一片会呼吸的星空。今夜只听星光，不必赶去哪里。" />
+<style>
+/* =========================================================
+   星野 · STARFIELD — 视觉与排版
+   ========================================================= */
+
+:root {
+  --bg: #02030a;
+  --ink: #e8eefc;
+  --ink-dim: rgba(232, 238, 252, 0.62);
+  --ink-faint: rgba(232, 238, 252, 0.34);
+  --line: rgba(180, 206, 255, 0.14);
+  --accent: #a8c8ff;
+  --glow: 168, 200, 255;
+
+  /* 全站统一到黑体（苹方）—— 深色背景上小字最清晰，也最克制。
+     变量名保留为 sans/serif/mono，但都指向同一套字体，避免页面出现多种字体语言。 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+               "Heiti SC", "Microsoft YaHei", "Noto Sans SC", "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+
+  --ease: cubic-bezier(0.22, 0.68, 0.24, 1);
+  /* 700px 以上固定，往下流体收缩 —— 这样内容实际宽度始终精确等于
+     --compose 减去两侧 gutter，构图不会因屏幕变宽而改变内部比例。
+     68 = (540 - 404) / 2，404 是 540 宽构图内部留给内容的净宽。 */
+  --gutter: clamp(20px, 4.6vw, 68px);
+  --copy-w: 404px;
+  /* 构图基准宽：所有内部尺寸都以它为基准比例。
+     整体缩放不放在 CSS 里 —— zoom 与 transform: var(--scale) 实测都被浏览器忽略，
+     改由 JS（applyComposeScale）算出「占视口一半宽」的系数后写进 style。 */
+  --compose: 540px;
+  --copy: 100%;
+  --orb-max: 132px;
+  --orb-min: 132px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html { background: var(--bg); }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.75;
+  font-synthesis: none;
+  text-autospace: normal;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* ---------- 画布：整屏夜空 ---------- */
+#sky {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* 可视缩放由 JS 写入（跟随内容一起放大，否则会出现「内容大了、星空没大」的错位）。
+     只放大可视尺寸、不动绘制分辨率：星空是柔和渐变与光点，轻微拉大看不出来，
+     离屏画布和粒子数都能保持原来的开销。 */
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ---------- 光晕、暗角、颗粒 ---------- */
+.glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 78vmax;
+  height: 78vmax;
+  margin: -39vmax 0 0 -39vmax;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  will-change: transform;
+  transform: translate3d(var(--gx, 50vw), var(--gy, 50vh), 0);
+  background: radial-gradient(
+    circle at center,
+    rgba(var(--glow), 0.13) 0%,
+    rgba(var(--glow), 0.065) 30%,
+    rgba(var(--glow), 0) 66%
+  );
+  mix-blend-mode: screen;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 118% 92% at 50% 44%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.42) 78%, rgba(0, 0, 0, 0.72) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 22%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, 0.46) 100%);
+}
+
+.grain {
+  position: fixed;
+  inset: -50%;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain-shift 7s steps(6) infinite;
+  mix-blend-mode: overlay;
+}
+
+@keyframes grain-shift {
+  0%   { transform: translate3d(0, 0, 0); }
+  20%  { transform: translate3d(-3%, 2%, 0); }
+  40%  { transform: translate3d(2%, -3%, 0); }
+  60%  { transform: translate3d(-2%, -2%, 0); }
+  80%  { transform: translate3d(3%, 1%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* 地平线微光：让夜空不是死的黑 */
+.dawn {
+  position: fixed;
+  left: 50%;
+  bottom: -24vh;
+  width: 150vw;
+  height: 56vh;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.5;
+  background: radial-gradient(ellipse at 50% 100%, rgba(96, 132, 220, 0.20) 0%, rgba(70, 100, 190, 0.08) 38%, rgba(0, 0, 0, 0) 72%);
+  filter: blur(6px);
+}
+
+/* ---------- 舞台 ---------- */
+.stage {
+  position: relative;
+  z-index: 4;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  /* 构图基准固定 540px，整体缩放由 JS 写入（见 starfield.js 的 applyComposeScale）：
+     目标渲染宽 = 视口一半，transform-origin 左上，另用负边距补偿布局。
+     这里只负责「基准宽度 + 贴左」。 */
+  width: var(--compose);
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: auto;
+  padding: clamp(22px, 4vh, 46px) var(--gutter) clamp(22px, 4vh, 44px);
+}
+
+/* ---------- 品牌 ---------- */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 收进构图内并与左边缘同列 —— 否则它会贴屏幕边缘，和下面的内容块错开 */
+  align-self: flex-start;
+  max-width: var(--compose);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.30em;
+  text-indent: 0.30em;          /* 抵消末字后多出的字距，视觉上真正居中 */
+  color: var(--ink-faint);
+}
+
+.brand .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #dce9ff;
+  box-shadow: 0 0 12px 3px rgba(190, 216, 255, 0.65);
+  animation: pulse 4.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  flex: 1 1 auto;
+  /* 永远是单列：文案在上、呼吸土星在左下。
+     不再随宽度切两列 —— 这是「宽屏也不变」的关键。 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  align-content: center;
+  gap: clamp(30px, 6vh, 52px);
+  padding: clamp(24px, 6vh, 80px) 0;
+}
+
+.hero-copy { max-width: var(--copy); }
+
+.eyebrow {
+  margin: 0 0 clamp(14px, 2.4vh, 24px);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  color: var(--ink-dim);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  /* 构图已经固定，所以字号也不该再随视口变化 ——
+     用固定值，只加一条「内容放得下」的上限兜底。
+     7 个全角字 × 34.4px = 241px，而 360px 小屏的内容宽是 320px，仍有余量。 */
+  font-size: min(
+    2.15rem,
+    calc((min(100vw, 540px) - 2 * clamp(20px, 4.6vw, 68px)) / 7.35)
+  );
+  line-height: 1.22;
+  letter-spacing: -0.01em;      /* 大字重下手动收紧，避免中文块面松散 */
+  white-space: nowrap;
+  text-shadow: 0 0 46px rgba(150, 186, 255, 0.26), 0 0 130px rgba(120, 160, 255, 0.14);
+}
+
+.title::after {
+  content: "";
+  display: block;
+  width: clamp(48px, 10vw, 88px);
+  height: 1px;
+  margin-top: clamp(20px, 3.4vh, 34px);
+  background: linear-gradient(90deg, rgba(200, 220, 255, 0.5), rgba(200, 220, 255, 0));
+}
+
+.lede {
+  margin: clamp(18px, 3vh, 30px) 0 0;
+  font-size: clamp(0.9rem, 1.35vw, 1rem);
+  line-height: 1.95;
+  letter-spacing: 0.01em;
+  color: var(--ink-dim);
+}
+
+/* ---------- 提示 ---------- */
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  margin-top: clamp(26px, 4.6vh, 44px);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+.hint-item { display: inline-flex; align-items: center; gap: 8px; }
+.hint-sep { width: 1px; height: 11px; background: var(--line); }
+
+.ico {
+  width: 13px;
+  height: 13px;
+  display: inline-block;
+  flex: none;
+  opacity: 0.75;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.ico--move {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8c8ff' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3'/%3E%3C/svg%3E");
+}
+
+.ico--click {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a8c8ff' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1'/%3E%3Ccircle cx='12' cy='12' r='2.4'/%3E%3C/svg%3E");
+}
+
+/* ---------- 呼吸引导 ---------- */
+.breath {
+  justify-self: start;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  text-align: left;
+  max-width: 100%;
+}
+
+.breath-orb {
+  position: relative;
+  width: clamp(var(--orb-min), 32vw, var(--orb-max));
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  /* --s 是所有部件的统一缩放（呼吸）；--g 是星光的亮度 */
+  --s: 0.72;
+  --g: 0.42;
+  --tilt: -17deg;
+}
+
+/* 底衬：一团很淡的星云辉光，让星尘有"聚起来的背景" */
+.orb-halo {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(178, 205, 255, 0.20) 0%,
+    rgba(150, 182, 255, 0.10) 34%,
+    rgba(120, 150, 240, 0.035) 60%,
+    rgba(90, 120, 220, 0) 78%);
+  opacity: calc(var(--g) * 0.9);
+  transform: scale(var(--s));
+  transition: transform var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1),
+              opacity var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1);
+  filter: blur(6px);
+}
+
+/* 环的承载层：负责倾角 */
+.orb-tilt {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--tilt));
+  pointer-events: none;
+}
+
+/* 环本身：不是实心环带，而是「一圈星尘」——
+   用带虚线的细边 + 多层柔光描出轨迹，靠模糊和 box-shadow 发光 */
+.orb-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 108%;
+  aspect-ratio: 2.5 / 1;
+  margin: -21.6% 0 0 -54%;
+  border-radius: 50%;
+  border: 1.5px dotted rgba(214, 232, 255, 0.30);
+  opacity: calc(0.22 + var(--g) * 1.30);
+  /* 呼吸时环随核心一起收放 */
+  scale: var(--s);
+  transition: opacity var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1),
+              scale var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1);
+  box-shadow: 0 0 22px rgba(176, 208, 255, 0.26);
+  filter: blur(0.35px);
+  animation: ring-orbit 88s linear infinite;
+}
+
+/* 尘埃带：一层模糊的实体椭圆，让环有"厚度"，不是一根线 */
+.orb-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(198, 220, 255, 0) 52%,
+    rgba(214, 232, 255, 0.22) 66%,
+    rgba(226, 240, 255, 0.30) 76%,
+    rgba(198, 220, 255, 0.12) 88%,
+    rgba(198, 220, 255, 0) 100%);
+  filter: blur(3px);
+}
+
+/* 环上的星点：沿椭圆轨道分布，随环一起公转 */
+.sp {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(2.6px * var(--r, 1));
+  height: calc(2.6px * var(--r, 1));
+  margin: calc(-1.3px * var(--r, 1)) 0 0 calc(-1.3px * var(--r, 1));
+  border-radius: 50%;
+  background: #ffffff;
+  opacity: calc(0.18 + var(--g) * 1.25);
+  transform: rotate(var(--a)) translateX(54%) rotate(90deg) rotate(calc(-1 * var(--a)));
+  box-shadow: 0 0 8px 2px rgba(205, 226, 255, 0.85);
+  transition: opacity var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1);
+  animation: sparkle 3.6s ease-in-out infinite;
+  animation-delay: calc(var(--a) / 90deg * -0.9s);
+}
+
+/* 球体：不是实心圆，而是密密麻麻的星点堆出来的球面。
+   四层 radial-gradient 点阵 + 一层柔和的中心亮斑。 */
+.orb-stars {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: calc(0.30 + var(--g) * 1.15);
+  transform: scale(var(--s));
+  transition: transform var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1),
+              opacity var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1);
+  background-image:
+    radial-gradient(circle 1.4px at 42% 38%, rgba(255,255,255,0.95) 0 1.2px, rgba(255,255,255,0) 2.2px),
+    radial-gradient(circle 1.4px at 62% 30%, rgba(255,250,236,0.98) 0 1.2px, rgba(255,250,236,0) 2.2px),
+    radial-gradient(circle 1.4px at 30% 58%, rgba(255,255,255,0.92) 0 1.2px, rgba(255,255,255,0) 2.2px),
+    radial-gradient(circle 1.4px at 70% 62%, rgba(255,246,224,0.95) 0 1.2px, rgba(255,246,224,0) 2.2px),
+    radial-gradient(circle 1.4px at 52% 50%, rgba(255,255,255,1) 0 1.4px, rgba(255,255,255,0) 2.4px),
+    radial-gradient(circle 1.4px at 36% 46%, rgba(255,241,210,0.9) 0 1.1px, rgba(255,241,210,0) 2px),
+    radial-gradient(circle 1.4px at 58% 44%, rgba(255,255,255,0.88) 0 1.1px, rgba(255,255,255,0) 2px),
+    radial-gradient(circle 1.4px at 46% 66%, rgba(255,255,255,0.85) 0 1.1px, rgba(255,255,255,0) 2px),
+    radial-gradient(circle 1.4px at 66% 52%, rgba(255,250,235,0.9) 0 1.1px, rgba(255,250,235,0) 2px),
+    radial-gradient(circle 1.4px at 28% 44%, rgba(255,255,255,0.8) 0 1px, rgba(255,255,255,0) 1.9px),
+    radial-gradient(circle 1.4px at 74% 44%, rgba(255,255,255,0.8) 0 1px, rgba(255,255,255,0) 1.9px),
+    radial-gradient(circle 1.4px at 44% 26%, rgba(255,255,255,0.75) 0 1px, rgba(255,255,255,0) 1.9px),
+    radial-gradient(circle 1.4px at 60% 74%, rgba(255,255,255,0.7) 0 1px, rgba(255,255,255,0) 1.9px),
+    /* 星尘的整体底光：让它像"聚起来的星"，而不是一堆散点 */
+    radial-gradient(circle at 46% 44%,
+      rgba(255,252,240,0.42) 0%,
+      rgba(214,232,255,0.24) 26%,
+      rgba(150,186,255,0.10) 52%,
+      rgba(120,160,245,0.03) 72%,
+      rgba(110,150,240,0) 86%);
+  filter: blur(0.25px);
+  animation: starlit 5.2s ease-in-out infinite;
+}
+
+/* 球心：最密的那一小撮星 */
+.orb-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26%;
+  aspect-ratio: 1 / 1;
+  margin: -13% 0 0 -13%;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 251, 236, 0.72) 18%,
+    rgba(214, 232, 255, 0.30) 42%,
+    rgba(150, 186, 255, 0.08) 68%,
+    rgba(120, 160, 245, 0) 100%);
+  opacity: calc(0.34 + var(--g) * 1.05);
+  transform: scale(var(--s));
+  transition: transform var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1),
+              opacity var(--dur, 4000ms) cubic-bezier(0.42, 0, 0.28, 1);
+  filter: blur(0.5px);
+}
+
+/* 中心那颗主星 */
+.orb-star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 14px 4px rgba(215, 232, 255, 0.92), 0 0 40px 12px rgba(168, 200, 255, 0.35);
+  animation: pulse 4.2s ease-in-out infinite;
+}
+
+@keyframes ring-orbit {
+  from { rotate: 0deg; }
+  to   { rotate: 360deg; }
+}
+
+@keyframes starlit {
+  0%, 100% { filter: blur(0.25px) brightness(1); }
+  50%      { filter: blur(0.25px) brightness(1.22); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: calc(0.18 + var(--g) * 0.8); }
+  50%      { opacity: calc(0.35 + var(--g) * 1.5); }
+}
+
+/* ---------- 呼吸的四个阶段 ---------- */
+/* 吸气：星尘聚拢、变亮 */
+.breath-orb[data-phase="in"] { --s: 1; --g: 0.78; }
+/* 屏息：维持，只留极轻的浮动 */
+.breath-orb[data-phase="hold"] { --s: 0.99; --g: 0.70; }
+/* 呼气：星尘散开、变暗 */
+.breath-orb[data-phase="out"] { --s: 0.72; --g: 0.36; }
+/* 待机（静默模式） */
+.breath-orb[data-phase="idle"] { --s: 0.86; --g: 0.52; }
+.breath-orb[data-phase="idle"] .orb-ring,
+.breath-orb[data-phase="idle"] .sp { animation-play-state: paused; }
+
+.breath-text {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+  color: var(--ink-dim);
+  transition: opacity 0.7s var(--ease);
+}
+
+/* ---------- 页脚 ---------- */
+.foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.6vh, 26px);
+}
+
+.foot blockquote {
+  margin: 0;
+  max-width: 40em;
+  font-size: clamp(0.82rem, 1.15vw, 0.95rem);
+  font-weight: 400;
+  line-height: 2.05;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ---------- 控件 ---------- */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ctrl-sep { width: 1px; height: 16px; background: var(--line); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(180, 206, 255, 0.035);
+  color: var(--ink-dim);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: color 0.4s var(--ease), border-color 0.4s var(--ease),
+              background-color 0.4s var(--ease), box-shadow 0.4s var(--ease),
+              transform 0.4s var(--ease);
+}
+
+.btn:hover {
+  color: var(--ink);
+  border-color: rgba(180, 206, 255, 0.34);
+  background: rgba(180, 206, 255, 0.075);
+  transform: translateY(-1px);
+}
+
+.btn:active { transform: translateY(0); }
+
+.btn:focus-visible {
+  outline: 2px solid rgba(168, 200, 255, 0.7);
+  outline-offset: 3px;
+}
+
+.btn-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-faint);
+  transition: background-color 0.5s var(--ease), box-shadow 0.5s var(--ease);
+}
+
+.btn.is-on {
+  color: var(--ink);
+  border-color: rgba(168, 200, 255, 0.4);
+  background: rgba(168, 200, 255, 0.1);
+  box-shadow: 0 0 26px rgba(130, 170, 255, 0.18);
+}
+
+.btn.is-on .btn-led {
+  background: #cfe3ff;
+  box-shadow: 0 0 10px 2px rgba(190, 216, 255, 0.8);
+}
+
+.quiet-note {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  animation: fade-in 1.2s var(--ease) both;
+}
+
+/* 静默模式：文案更收敛 */
+body.is-calm .title {
+  text-shadow: none;
+  color: rgba(232, 238, 252, 0.9);
+  transition: color 1.2s var(--ease), text-shadow 1.2s var(--ease);
+}
+body.is-calm .dawn { opacity: 0.22; transition: opacity 1.2s var(--ease); }
+body.is-calm .glow { opacity: 0.35 !important; }
+
+/* ---------- 入场动画 ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: rise 1.25s var(--ease) forwards;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---------- 响应式 ---------- */
+/* 单列 + 左对齐现在是全局默认，这里只处理太窄时呼吸球要小一点 */
+@media (max-width: 900px) {
+  .breath-orb { width: 132px; }
+  .breath-text { letter-spacing: 0.2em; text-indent: 0; }
+  .orb-ring { width: 102%; margin: -19.5% 0 0 -51%; }
+  .sp { transform: rotate(var(--a)) translateX(51%) rotate(90deg) rotate(calc(-1 * var(--a))); }
+  .br-wide { display: none; }
+}
+
+@media (max-width: 560px) {
+  .hint { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .hint-sep { display: none; }
+  .breath-orb { width: 108px; }
+  .glow { display: none; }
+}
+
+/* 触屏设备：无需光标光晕 */
+@media (hover: none) {
+  .glow { display: none; }
+}
+
+/* ---------- 无障碍：尊重系统的减弱动效 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .grain { animation: none; }
+  .brand .dot,
+  .orb-star,
+  .orb-stars,
+  .sp { animation: none; opacity: 0.9; }
+  .orb-ring { animation: none; }
+  .breath-orb[data-phase="hold"] .orb-ring { animation: none; }
+  .reveal {
+    animation-duration: 0.6s;
+    filter: none;
+  }
+  .btn:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+
+  <!-- 星空主画面 -->
+  <canvas id="sky" aria-hidden="true"></canvas>
+
+  <!-- 前景渐晕与颗粒感 -->
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="dawn" aria-hidden="true"></div>
+
+  <!-- 鼠标光晕 -->
+  <div class="glow" id="glow" aria-hidden="true"></div>
+
+  <main class="stage" id="stage">
+
+    <header class="brand reveal" style="--d:120ms">
+      <span class="dot" aria-hidden="true"></span>
+      <span>星野 · STARFIELD</span>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow reveal" style="--d:320ms">此刻，只有你和星空</p>
+
+        <h1 class="title reveal" style="--d:460ms">今夜　只听星光</h1>
+
+        <p class="lede reveal" style="--d:640ms">
+          今夜不必赶去哪里。<br class="br-wide" />
+          星光这样亮着，你也不必急着离开。
+        </p>
+
+        <div class="hint reveal" style="--d:860ms">
+          <span class="hint-item"><i class="ico ico--move" aria-hidden="true"></i>移动光标，星空会跟着你</span>
+          <span class="hint-sep" aria-hidden="true"></span>
+          <span class="hint-item"><i class="ico ico--click" aria-hidden="true"></i>轻点一下，点亮一片星尘</span>
+        </div>
+      </div>
+
+      <!-- 呼吸引导：极轻地出现，随 4-7-8 节奏伸缩 -->
+      <aside class="breath reveal" style="--d:780ms">
+        <div class="breath-orb" id="orb" aria-hidden="true">
+          <!-- 星光汇聚成的土星：不是实体星球，而是尘埃/星点聚出来的形状 -->
+          <div class="orb">
+            <div class="orb-halo"></div>
+            <div class="orb-tilt">
+              <i class="orb-ring"></i>
+              <!-- 环上的星点，随环一起转 -->
+              <i class="sp" style="--a: 4deg;  --r: 1.0"></i>
+              <i class="sp" style="--a: 27deg; --r: 0.8"></i>
+              <i class="sp" style="--a: 52deg; --r: 1.2"></i>
+              <i class="sp" style="--a: 78deg; --r: 0.9"></i>
+              <i class="sp" style="--a: 104deg; --r: 1.1"></i>
+              <i class="sp" style="--a: 130deg; --r: 0.75"></i>
+              <i class="sp" style="--a: 155deg; --r: 1.0"></i>
+              <i class="sp" style="--a: 180deg; --r: 0.85"></i>
+              <i class="sp" style="--a: 206deg; --r: 1.15"></i>
+              <i class="sp" style="--a: 232deg; --r: 0.8"></i>
+              <i class="sp" style="--a: 258deg; --r: 1.05"></i>
+              <i class="sp" style="--a: 284deg; --r: 0.9"></i>
+              <i class="sp" style="--a: 310deg; --r: 1.1"></i>
+              <i class="sp" style="--a: 336deg; --r: 0.78"></i>
+            </div>
+            <div class="orb-stars"></div>
+            <i class="orb-core"></i>
+            <i class="orb-star"></i>
+          </div>
+        </div>
+        <p class="breath-text" id="breathText" role="status" aria-live="polite">跟随这颗星，慢慢呼吸</p>
+      </aside>
+    </section>
+
+    <footer class="foot reveal" style="--d:1200ms">
+      <blockquote>我们都在同一片夜空下，只是看见的星星不同。</blockquote>
+
+      <div class="controls" role="group" aria-label="页面控制">
+        <button class="btn" id="soundBtn" type="button" aria-pressed="false">
+          <span class="btn-led" aria-hidden="true"></span>
+          <span class="btn-label">开启环境音</span>
+        </button>
+        <span class="ctrl-sep" aria-hidden="true"></span>
+        <button class="btn" id="calmBtn" type="button" aria-pressed="false">
+          <span class="btn-led" aria-hidden="true"></span>
+          <span class="btn-label">更安静一点</span>
+        </button>
+      </div>
+
+      <p class="quiet-note" id="quietNote" hidden>已进入静默模式：星空停下，只剩你自己。</p>
+    </footer>
+
+  </main>
+
+<script>
+/* =========================================================
+   星野 · STARFIELD
+   一片会呼吸的夜空：多层视差 / 闪烁 / 流星 / 星云 / 星尘
+   —— 无依赖，纯 Canvas 2D
+   ========================================================= */
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('sky');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const FINE_POINTER = window.matchMedia('(hover: hover) and (pointer: fine)');
+
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // 把 "rgba(r,g,b,a)" 的透明度乘以一个系数（用于分层铺开同一套色标）
+  function tintAlpha(rgba, k) {
+    const i = rgba.lastIndexOf(',');
+    const a = parseFloat(rgba.slice(i + 1));
+    return `${rgba.slice(0, i + 1)}${(a * k).toFixed(4)})`;
+  }
+
+  /* =========================================================
+     分形噪声（fBm）
+     真实银河最不像「数学曲线」的地方就是：亮度斑驳、尘埃成团、
+     两侧不对称。这里用哈希 + 平滑插值的值噪声叠加 5 个倍频来提供这种不规则性。
+     它同时用于：恒星云团块、暗尘形状、带身宽度的起伏、银心的不对称。
+     ========================================================= */
+  const NOISE = (() => {
+    const hash = (ix, iy) => {
+      const h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263);
+      const h2 = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h2 ^ (h2 >>> 16)) >>> 0) / 4294967296;
+    };
+    const fade = (t) => t * t * (3 - 2 * t);
+
+    // 单层值噪声，坐标最好落在 1~16 之间
+    function value2(x, y) {
+      const xi = Math.floor(x), yi = Math.floor(y);
+      const xf = x - xi, yf = y - yi;
+      const u = fade(xf), v = fade(yf);
+      const a = hash(xi, yi), b = hash(xi + 1, yi);
+      const c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+      return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+    }
+
+    // 分形叠加：返回大致 0~1（中心约 0.5）
+    function fbm(x, y, octaves = 5, gain = 0.5, lac = 2.03) {
+      let sum = 0, amp = 1, norm = 0, fx = x, fy = y;
+      for (let i = 0; i < octaves; i++) {
+        sum += value2(fx, fy) * amp;
+        norm += amp;
+        amp *= gain;
+        fx *= lac; fy *= lac;
+      }
+      return sum / norm;
+    }
+
+    return { value2, fbm };
+  })();
+
+  /* ---------- 银河的几何常量 ----------
+     这几个值决定了银河在画面上的走向与大小，测试脚本会读取同一份，
+     避免「代码改了、测量还在按旧参数算」。 */
+  const MW = {
+    // 带身的峰值透明度（不是「增益」而是最终 alpha 上限）。
+    // 色带沿垂直方向是严格不重叠的窄条，任意像素只被一条覆盖，
+    // 所以这个值直接就是脊线处的 alpha —— 必须 ≤ 1，否则会被截断、核线糊成白条。
+    GAIN: 0.88,
+    // 核球额外增益：让银心比带身明显更暖更亮。
+    // 注意核球是叠在带身上的，两者 alpha 相加超过 1 就会被截断，
+    // 所以这里保持在 1.0 附近，靠「暖色 + 更厚」而不是靠亮度取胜。
+    BULGE_GAIN: 1.0,
+    // 离屏方块边长 = max(视口宽高) × SIZE_FACTOR
+    // 贴图在屏幕上覆盖的边长 = max(视口宽高) × COVER_FACTOR
+    // 两者尽量接近（≈1:1），否则贴图会被放大，等于把银河放大、核球被挤出视口
+    SIZE_FACTOR: 0.95,
+    COVER_FACTOR: 1.29,
+    cx: 0.50, cy: 0.50,         // 带心（归一化，取 0.5 对齐贴图中心，保证核球可见）
+    angle: -27,                 // 倾角（度）
+    halfLen: 1.00,              // 半长
+    halfWidth: 0.085,           // 半宽（决定银河视觉厚度）
+    coreT: -0.06,               // 核球在轴上的位置
+    coreWidth: 0.34,            // 核球沿轴的半径
+    // 垂直带轴的亮度剖面：窄脊 + 宽晕，两者的 sigma 都是 halfWidth 的倍数。
+    // 绘制与测量都读这套值，保证两边永远一致。
+    SIG_RIDGE: 0.50,
+    SIG_HALO: 1.30,
+    A_RIDGE: 0.85,
+    A_HALO: 0.15,
+    SIG_ASYM: 0.42,             // 两侧厚度差：真实银河不会左右对称
+    FEATHER: 0.55,              // 窄条的羽化比例（消除台阶）
+    DUST: 0.80,                 // 暗尘带的遮挡强度上限
+    CORE_SIG: 2.30,             // 核球在垂直方向的 sigma 倍数
+  };
+
+  /* ---------- 状态 ---------- */
+  const state = {
+    w: 0, h: 0, dpr: 1,     // 视口尺寸（逻辑像素）与像素比
+    cx: 0, cy: 0,            // 视口中心
+    calm: false,             // 静默模式
+    running: true,
+    t: 0,                    // 缓动后的时间（秒）
+    last: 0,
+    cam: { x: 0, y: 0 },     // 目标镜头偏移（视差）
+    camEase: { x: 0, y: 0 }, // 实际镜头偏移
+    layers: [0, 0, 0],       // 每层深度系数
+    stars: [],               // 均匀分布的场星
+    bandStars: [],           // 银河带内的星群（决定银河的密度感）
+    dust: [],
+    bursts: [],
+    meteors: [],
+    nextMeteor: 2.5,
+  };
+
+  /* ---------- 发光贴图（预渲染，避免逐帧建径向渐变） ---------- */
+  const GLOW_LEVELS = 10;
+  const glowSprites = [];
+  function makeGlow(size, coreAlpha) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    const r = size / 2;
+    const grad = g.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, `rgba(255,255,255,${coreAlpha})`);
+    grad.addColorStop(0.16, `rgba(235,244,255,${coreAlpha * 0.55})`);
+    grad.addColorStop(0.42, 'rgba(150,190,255,0.13)');
+    grad.addColorStop(1, 'rgba(90,130,220,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(r, r, r, 0, TAU);
+    g.fill();
+    return c;
+  }
+  for (let i = 0; i < GLOW_LEVELS; i++) {
+    glowSprites.push(makeGlow(96, +(0.16 + 0.84 * (i / (GLOW_LEVELS - 1))).toFixed(3)));
+  }
+
+  const halo = (() => {
+    const s = 512;
+    const c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    const r = s / 2;
+    const grad = g.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.06, 'rgba(226,238,255,0.60)');
+    grad.addColorStop(0.18, 'rgba(170,205,255,0.26)');
+    grad.addColorStop(0.45, 'rgba(120,165,255,0.09)');
+    grad.addColorStop(1, 'rgba(80,120,220,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(r, r, r, 0, TAU);
+    g.fill();
+    return c;
+  })();
+
+  /* =========================================================
+     银河（Milky Way）
+     真银河的观感来自四件事，缺一不可：
+       1. 一条明确倾斜、中间厚两端薄的带状结构
+       2. 中央核球的暖黄辉光（越靠中心越黄越亮）
+       3. 横贯带轴的暗尘带，把银河「劈」成两半
+       4. 细密到发糊的颗粒感（未分解的恒星群）
+     ========================================================= */
+  const galaxy = {
+    // 带轴：单位向量 + 法向量（在离屏方块的归一化坐标里）
+    cx: MW.cx, cy: MW.cy,
+    ax: 0, ay: 0,          // 沿轴
+    nx: 0, ny: 0,          // 垂直带轴
+    halfLen: MW.halfLen,   // 半长（归一化）
+    halfWidth: MW.halfWidth,
+    coreT: MW.coreT,       // 核球中心在轴上的位置
+    coreWidth: MW.coreWidth,
+    dust: [],              // 暗尘带
+    knots: [],             // 亮结（恒星密集处）
+    hii: [],               // 淡淡的红色发射星云
+    init(s) {
+      const ang = MW.angle * Math.PI / 180;
+      this.ax = Math.cos(ang);
+      this.ay = Math.sin(ang);
+      this.nx = -this.ay;
+      this.ny = this.ax;
+
+      // 剖面衰减到可忽略的距离（绘制时渐变就铺这么宽，画出零值没有意义）
+      const s1 = MW.SIG_RIDGE, s2 = MW.SIG_HALO;
+      const curve = (q) => MW.A_RIDGE * Math.exp(-(q / s1) * (q / s1)) + MW.A_HALO * Math.exp(-(q / s2) * (q / s2));
+      let cut = 0.5;
+      for (let i = 1; i <= 200; i++) {
+        const q = (i / 200) * 0.6;
+        if (curve(q) < 0.008) { cut = q; break; }
+      }
+      this.profileCut = cut;
+
+      // 暗尘带：落在带轴两侧，而不是正压轴心 —— 真实银河的尘埃聚在银道面附近，
+      // 且中央往往留出一条较亮的窄脊。用较小的 w 让暗纹明确、可辨识。
+      this.dust = [
+        { off: -0.055, w: 0.032, len: 0.94, base: 0.44, wave: 0.013, freq: 2.6, ph: 0.4 },
+        { off: 0.058, w: 0.027, len: 0.86, base: 0.38, wave: 0.015, freq: 3.4, ph: 2.2 },
+        { off: -0.102, w: 0.030, len: 0.58, base: 0.42, wave: 0.012, freq: 4.1, ph: 4.7 },
+        { off: 0.112, w: 0.024, len: 0.44, base: 0.32, wave: 0.011, freq: 4.8, ph: 1.3 },
+      ];
+
+      // 亮结：沿带轴撒点，密度向核球聚拢
+      this.knots = [];
+      const nk = Math.round(s * 0.52);
+      for (let i = 0; i < nk; i++) {
+        const q = (Math.random() * 2 - 1) * this.halfLen;
+        const p = (Math.random() * 2 - 1) * this.halfWidth * 0.52;
+        const u = 0.5 + q;                       // 带轴上的归一化位置
+        const across = 1 - 0.42 * Math.min(1, Math.abs(p) / 0.11);
+        const towardCore = 1 - 0.32 * Math.abs(p) / this.halfWidth;
+        const dens = Math.pow(galaxy.falloff(q / this.halfLen), 0.7)
+          * Math.exp(-0.5 * Math.pow((u - this.coreT) / this.coreWidth, 2));
+        if (Math.random() > clamp(dens * 2.15 * across * towardCore, 0, 1)) continue;
+        this.knots.push({ u, p, r: rand(0.45, 1.7), a: rand(0.10, 0.34) });
+      }
+
+      // 红色发射星云：只放 3 处，极淡
+      this.hii = [];
+      for (let i = 0; i < 3; i++) {
+        this.hii.push({
+          q: rand(-0.55, 0.55),
+          p: rand(-1, 1) * this.halfWidth * 0.4,
+          r: rand(0.02, 0.045),
+          a: rand(0.05, 0.10),
+        });
+      }
+    },
+    // 沿带轴的亮度衰减：中间最亮，两端迅速消散（真银河的锥形感来源）
+    falloff(q) {
+      const u = Math.abs(q);
+      if (u >= 1) return 0;
+      return Math.pow(1 - u * u, 2.1);
+    },
+    // 垂直带轴的亮度剖面：核球处厚，两端薄
+    // 两侧的厚度系数：核球附近两边都厚，往外则一边厚一边薄。
+    // 用轴向噪声让「哪边更厚」沿轴缓慢变化，避免对称带来的呆板感。
+    sideScale(t) {
+      const n = NOISE.fbm(0.5 + t * 0.55, 7.31, 3);
+      const asym = (n - 0.5) * 2 * (0.35 + 0.65 * (1 - this.falloff(t)));
+      return [1 - asym * MW.SIG_ASYM, 1 + asym * MW.SIG_ASYM];
+    },
+    _sideCache: new Map(),
+    sideScaleCached(t) {
+      const key = Math.round(t * 160) / 160;
+      let v = this._sideCache.get(key);
+      if (!v) { v = this.sideScale(key); this._sideCache.set(key, v); }
+      return v;
+    },
+    profile(p, t, u) {
+      const hw = this.halfWidth * (0.72 + 0.28 * this.falloff(t));
+      const ss = p < 0 ? this.sideScaleCached(t)[0] : this.sideScaleCached(t)[1];
+      const s1 = hw * MW.SIG_RIDGE * ss;
+      const s2 = hw * MW.SIG_HALO * ss;
+      const a = p / s1, b = p / s2;
+      return MW.A_RIDGE * Math.exp(-a * a) + MW.A_HALO * Math.exp(-b * b);
+    },
+    // 核球辉光（暖黄）
+    bulge(u, t) {
+      const s = (u - this.coreT) / this.coreWidth;
+      return Math.exp(-s * s * 0.62) * this.falloff(t * 0.85);
+    },
+    // 归一化坐标 → 带坐标 { t 沿轴, u 绝对位置, p 垂直距离 }
+    coords(x, y) {
+      const dx = x - this.cx, dy = y - this.cy;
+      const t = (dx * this.ax + dy * this.ay) / this.halfLen;
+      const p = dx * this.nx + dy * this.ny;
+      return { t, p, u: 0.5 + t * this.halfLen };
+    },
+  };
+
+  /* ---------- 星云背景（离屏，低频重绘） ---------- */
+  const neb = {
+    cv: document.createElement('canvas'),        // 全分辨率层：颗粒 / 亮结 / 红色星云
+    g: null,
+    glowCv: document.createElement('canvas'),    // 低分辨率层：宽晕 + 核球（渐变本就平滑）
+    gg: null,
+    size: 0,
+    glowSize: 0,
+    NX: 30,                                      // 沿轴切片数（表达锥形衰减）
+    NB: 14,                                      // 垂直方向的窄条数（表达高斯剖面）
+    blobs: [],
+    bandCv: null,          // 银河的独立透明图层（暗尘要从它身上削，所以要分开）
+    bandG: null,
+    maskCv: null,          // 尘埃蒙版（低分辨率小图，放大后羽化）
+    maskG: null,
+    MASK_CELLS: 72,        // 蒙版分辨率
+    last: -1,
+    interval: 1 / 7,
+    build(w, h) {
+      const size = Math.max(560, Math.round(Math.max(w, h) * MW.SIZE_FACTOR));
+      this.size = size;
+      this.cv.width = this.cv.height = size;
+      this.g = this.cv.getContext('2d');
+      // 光晕层用 0.42 倍分辨率：高斯剖面本身就是平滑的，放大不会有损观感，
+      // 但像素工作量降到约 1/6，避免每次重建都卡一下。
+      const gs = Math.max(280, Math.round(size * 0.42));
+      this.glowSize = gs;
+      this.glowCv.width = this.glowCv.height = gs;
+      this.gg = this.glowCv.getContext('2d');
+      // 银河画在独立透明图层上：暗尘用 destination-out 从它身上「削」出来，
+      // 这样尘埃只影响银河本身，绝不会误伤背景夜空与星点。
+      this.bandCv = document.createElement('canvas');
+      this.bandCv.width = this.bandCv.height = gs;
+      this.bandG = this.bandCv.getContext('2d');
+      this.maskCv = document.createElement('canvas');
+      this.maskCv.width = this.maskCv.height = this.MASK_CELLS;
+      this.maskG = this.maskCv.getContext('2d');
+      galaxy.init(size);
+
+      // 外围的彩色星云团：压得很低，只做氛围，不抢银河
+      // 外围彩色星云团：只做极淡的氛围色，绝不能亮到把夜空整体抬起来
+      // （之前设为 0.04~0.07，相当于给整屏加了一层均匀环境光）
+      this.blobs = [
+        { c: [ 96, 126, 232], i: 0.055, x: 0.22, y: 0.24, r: 0.62, fx: 0.30, fy: 0.22, ph: 0.5 },
+        { c: [128, 102, 236], i: 0.050, x: 0.82, y: 0.26, r: 0.56, fx: 0.34, fy: 0.27, ph: 2.1 },
+        { c: [ 78, 176, 212], i: 0.036, x: 0.16, y: 0.82, r: 0.60, fx: 0.28, fy: 0.35, ph: 4.0 },
+        { c: [226, 148, 208], i: 0.030, x: 0.88, y: 0.80, r: 0.52, fx: 0.31, fy: 0.24, ph: 5.3 },
+      ];
+      this.last = -1;
+    },
+    /* 把银河本体（宽晕 + 窄脊 + 核球）画到任意一块画布上。
+
+       关键点：横向的高斯轮廓**必须写进渐变的 color stop 里**。
+       一条色带只用一次线性渐变，沿垂直方向按真实剖面采样 N 个点，
+       每个 stop 的透明度就是剖面在该处的值 —— 这样得到的是真正的曲线，
+       既不会像「扁椭圆」那样平坦无脊，也不会像「多条色带叠加」那样过曝。
+       沿轴方向则切成 NX 段，用来表达锥形衰减与核球。 */
+    /* 把银河本体画到任意一块画布上。
+
+       做法（这是唯一不会出错的画法）：
+       先把坐标系变换到「带的正交系」——原点在带心、x 轴沿带、y 轴垂直带，
+       再沿垂直方向把剖面切成 NB 条窄条。每条窄条是一个轴对齐矩形，
+       填充一个沿 y 的线性渐变，渐变端点直接取剖面公式在该处的值。
+       由于剖面公式的峰值就是 1（而不是叠加出来的），任何位置都不会过曝；
+       沿轴的锥形衰减则由「矩形高度」直接表达，也不需要额外归一化。
+       核球整条只画一次，用压扁的径向渐变。 */
+    glowTo(g, s, opt) {
+      const doBand = !opt || opt.band !== false;
+      const doBulge = !opt || opt.bulge !== false;
+      const { ax, ay, halfLen, halfWidth, coreT } = galaxy;
+
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      g.fillStyle = '#02030a';
+      g.fillRect(0, 0, s, s);
+      g.globalCompositeOperation = 'lighter';
+
+      g.save();
+      g.translate(galaxy.cx * s, galaxy.cy * s);
+      g.rotate(Math.atan2(ay, ax));
+      const L = halfLen * s;                 // 带的半长（像素）
+      const W = halfWidth * s;               // 带的半宽（像素）
+
+      /* ---------- 银河带身 ----------
+         结构：银河先画在「独立透明图层」上，暗尘再从这一层削出去，
+         最后整层用 lighter 叠回夜空。这样尘埃只影响银河本身。 */
+      if (doBand && this.bandG) {
+        const bg = this.bandG;
+        bg.setTransform(1, 0, 0, 1, 0, 0);
+        bg.globalCompositeOperation = 'source-over';
+        bg.globalAlpha = 1;
+        bg.clearRect(0, 0, s, s);
+        bg.save();
+        bg.translate(galaxy.cx * s, galaxy.cy * s);
+        bg.rotate(Math.atan2(ay, ax));
+
+        const NB = this.NB;                  // 垂直方向的窄条数
+        const yMax = galaxy.profileCut;
+        const step = (2 * yMax) / NB;
+        const NX = this.NX;
+        const feather = step * 0.55;         // 羽化宽度：消除台阶感（相邻条会重叠这点）
+
+        for (let j = 0; j < NB; j++) {
+          const yA = -yMax + j * step;
+          const yB = yA + step;
+          const yTop = yA - feather;
+          const yBot = yB + feather;
+
+          for (let k = 0; k < NX; k++) {
+            const u0 = 0.5 - halfLen + (k / NX) * 2 * halfLen;
+            const u1 = 0.5 - halfLen + ((k + 1) / NX) * 2 * halfLen;
+            const tC = (u0 + u1) / 2 - 0.5;
+            const along = galaxy.falloff(tC / halfLen);
+            if (along < 0.005) continue;
+
+            // —— 分形噪声：真实银河是斑驳的恒星云，不是一条匀称光带 ——
+            const nu = 0.5 + tC * 0.9;
+            const nb = NOISE.fbm(nu * 7.0, 1.7, 4);          // 亮度起伏（恒星云）
+            const nw = NOISE.fbm(nu * 4.0 + 11.3, 5.9, 3);   // 厚度起伏
+            const bright = 0.62 + 0.72 * Math.pow(nb, 0.85);
+            const wMul = 0.80 + 0.44 * nw;
+
+            // 该切片的实际半宽（含噪声与锥形衰减）
+            const hwN = halfWidth * (0.72 + 0.28 * along) * wMul;
+            // 颜色：脊线暖黄，外缘转蓝白
+            const dc = Math.abs((yA + yB) / 2) / Math.max(1e-6, hwN);
+            const warm = Math.exp(-dc * dc * 1.7);
+            const cr = Math.round(252 + 3 * warm);
+            const cg = Math.round(237 + 13 * warm);
+            const cb = Math.round(203 + 51 * (1 - warm));
+            const amp = (along * bright * MW.GAIN).toFixed(4);
+
+            // 形状交给渐变（1 → 0 → 1），所以相邻窄条在边界处的颜色天然衔接
+            const lg = bg.createLinearGradient(0, yTop * W, 0, yBot * W);
+            lg.addColorStop(0.00, `rgba(${cr},${cg},${cb},0)`);
+            lg.addColorStop(0.50, `rgba(${cr},${cg},${cb},${amp})`);
+            lg.addColorStop(1.00, `rgba(${cr},${cg},${cb},0)`);
+            bg.fillStyle = lg;
+            const x0 = (u0 - 0.5) * s;
+            const x1 = (u1 - 0.5) * s;
+            bg.fillRect(x0, yTop * W, x1 - x0, (yBot - yTop) * W);
+          }
+        }
+
+        bg.restore();                        // 回到恒等变换，便于整幅铺蒙版
+
+        /* —— 暗尘：从银河图层里「削」出裂谷 ——
+           在一张低分辨率小图上用分形噪声生成尘埃蒙版，放大后按 50% 羽化削掉。
+           得到的是不规则、带絮状边缘的黑色裂谷，而不是数学正弦曲线。
+           注意：这一步必须在恒等变换下做，否则蒙版会跟着旋转、错位。 */
+        const MC = this.MASK_CELLS;
+        const mcv = this.maskCv, mg = this.maskG;
+        mg.setTransform(1, 0, 0, 1, 0, 0);
+        mg.globalCompositeOperation = 'source-over';
+        mg.globalAlpha = 1;
+        mg.clearRect(0, 0, MC, MC);
+        mg.fillStyle = '#000';
+        for (let j = 0; j < MC; j++) {
+          const qy = (j + 0.5) / MC * 2 - 1;
+          for (let i = 0; i < MC; i++) {
+            const qx = (i + 0.5) / MC;
+            // 两组频率：低频决定尘埃带走向，高频提供絮状边缘
+            const n1 = NOISE.fbm(0.5 + qx * 5.6, 3.3 + qy * 6.2, 4);
+            const n2 = NOISE.fbm(0.5 + qx * 13.0, 19.0 + qy * 15.0, 3);
+            let d = (n1 * 0.60 + n2 * 0.55 - 0.54) * 3.4;
+            d = Math.max(0, Math.min(1, d)) * MW.DUST;
+            if (d < 0.02) continue;
+            mg.fillStyle = `rgba(0,0,0,${d.toFixed(3)})`;
+            mg.fillRect(i, j, 1, 1);
+          }
+        }
+        bg.globalCompositeOperation = 'destination-out';
+        bg.imageSmoothingEnabled = true;
+        bg.drawImage(mcv, 0, 0, MC, MC, 0, 0, s, s);
+
+        // 把银河层叠回夜空层
+        g.globalCompositeOperation = 'lighter';
+        g.drawImage(this.bandCv, 0, 0, s, s);
+      }
+
+      /* 核球：整条只画一个（每段各画一次会叠成过曝） */
+      if (doBulge) {
+        const rr = Math.max(6, halfWidth * MW.SIG_HALO * 5.0 * s);
+        const xC = coreT * halfLen * s;
+        // 核球自己一个增益：它的 alpha 是独立铺在带上的，
+        // 若跟着 GAIN 走会超过 1 被截断（核心糊成一片白）
+        const A = MW.GAIN * MW.BULGE_GAIN;
+        const bg = g.createRadialGradient(xC, 0, 0, xC, 0, rr);
+        bg.addColorStop(0.00, `rgba(255,251,238,${(1.00 * A).toFixed(4)})`);
+        bg.addColorStop(0.18, `rgba(255,243,214,${(0.70 * A).toFixed(4)})`);
+        bg.addColorStop(0.40, `rgba(255,229,182,${(0.34 * A).toFixed(4)})`);
+        bg.addColorStop(0.66, `rgba(248,215,180,${(0.13 * A).toFixed(4)})`);
+        bg.addColorStop(1.00, 'rgba(214,200,234,0)');
+        g.save();
+        g.translate(xC, 0);
+        g.scale(1, 0.52);                     // 压扁成银盘
+        g.translate(-xC, 0);
+        g.fillStyle = bg;
+        g.fillRect(xC - rr, -rr, rr * 2, rr * 2);
+        g.restore();
+      }
+
+      g.restore();
+    },
+
+    draw(t) {
+      if (t - this.last < this.interval) return;
+      this.last = t;
+      const g = this.g, s = this.size;
+      const { ax, ay, nx, ny, halfLen, halfWidth } = galaxy;
+
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      g.fillStyle = '#02030a';
+      g.fillRect(0, 0, s, s);
+      g.globalCompositeOperation = 'lighter';
+
+      /* —— 1 & 2. 银河本体画到低分辨率层；由 drawNebula 统一贴到屏幕上 ——
+         （贴图只在一个地方做，才能保证各处偏移一致） */
+      this.glowTo(this.gg, this.glowSize);
+      // 全分辨率层此时是空白的，颗粒/尘埃细节在下面几步里画上去
+
+      /* —— 3. 暗尘带：写进离屏底色，把银河劈开 —— */
+      g.globalCompositeOperation = 'source-over';
+      for (const d of galaxy.dust) {
+        for (let i = 0; i < 34; i++) {
+          const q = (i / 33) * 2 - 1;
+          const u = d.len * q;
+          const wave = d.wave * (Math.sin(q * d.freq + d.ph) * 0.6 + Math.sin(q * d.freq * 2.3 + d.ph * 1.7) * 0.4);
+          const x = (galaxy.cx + ax * halfLen * u + nx * (d.off + wave)) * s;
+          const y = (galaxy.cy + ay * halfLen * u + ny * (d.off + wave)) * s;
+          const taper = Math.pow(1 - q * q, 0.7);
+          const cg = g.createRadialGradient(x, y, 0, x, y, d.w * s);
+          cg.addColorStop(0, `rgba(2,3,10,${d.base * taper})`);
+          cg.addColorStop(1, 'rgba(2,3,10,0)');
+          g.fillStyle = cg;
+          g.beginPath();
+          g.arc(x, y, d.w * s, 0, TAU);
+          g.fill();
+        }
+      }
+
+      /* —— 4. 颗粒感：未分解的恒星群，银河真正「糊」起来的原因 —— */
+      g.globalCompositeOperation = 'lighter';
+      const nDots = Math.round(s * 2.4);
+      for (let i = 0; i < nDots; i++) {
+        const t = (Math.random() * 2 - 1) * 0.98;
+        const hw = halfWidth * (0.62 + 0.38 * galaxy.falloff(t));
+        const p = (Math.random() * 2 - 1) * hw;
+        const x = (galaxy.cx + ax * halfLen * t + nx * p) * s;
+        const y = (galaxy.cy + ay * halfLen * t + ny * p) * s;
+        const prof = galaxy.profile(p, t, 0.5 + t * halfLen);
+        const w = clamp(prof * galaxy.falloff(t), 0, 1.6);
+        if (w < 0.045) continue;
+        const warm = Math.random() < 0.34;
+        const a = rand(0.05, 0.22) * w;
+        g.fillStyle = warm
+          ? `rgba(255,236,206,${a.toFixed(3)})`
+          : `rgba(226,238,255,${a.toFixed(3)})`;
+        const r = Math.random() < 0.08 ? rand(1.2, 2.0) : rand(0.45, 1.05);
+        g.beginPath();
+        g.arc(x, y, r, 0, TAU);
+        g.fill();
+      }
+
+      /* —— 5. 亮结：恒星最密集处的一簇簇小白点 —— */
+      for (const k of galaxy.knots) {
+        const x = (galaxy.cx + ax * halfLen * (k.u - 0.5) + nx * k.p) * s;
+        const y = (galaxy.cy + ay * halfLen * (k.u - 0.5) + ny * k.p) * s;
+        g.fillStyle = `rgba(255,252,244,${k.a.toFixed(3)})`;
+        g.beginPath();
+        g.arc(x, y, k.r, 0, TAU);
+        g.fill();
+      }
+
+      /* —— 6. 几处极淡的红色发射星云 —— */
+      for (const h of galaxy.hii) {
+        const x = (galaxy.cx + ax * halfLen * h.q + nx * h.p) * s;
+        const y = (galaxy.cy + ay * halfLen * h.q + ny * h.p) * s;
+        const r = h.r * s;
+        const hg = g.createRadialGradient(x, y, 0, x, y, r);
+        hg.addColorStop(0, `rgba(255,120,146,${h.a})`);
+        hg.addColorStop(0.5, `rgba(240,96,132,${(h.a * 0.35).toFixed(3)})`);
+        hg.addColorStop(1, 'rgba(220,80,120,0)');
+        g.fillStyle = hg;
+        g.beginPath();
+        g.arc(x, y, r, 0, TAU);
+        g.fill();
+      }
+
+      /* —— 7. 远处的彩色星云团（最外层氛围） —— */
+      for (const b of this.blobs) {
+        const x = (b.x + Math.sin(t * b.fx + b.ph) * 0.035) * s;
+        const y = (b.y + Math.cos(t * b.fy + b.ph) * 0.030) * s;
+        const r = b.r * s * (1 + Math.sin(t * 0.17 + b.ph) * 0.045);
+        const [cr, cg2, cb] = b.c;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, `rgba(${cr},${cg2},${cb},${b.i})`);
+        grad.addColorStop(0.45, `rgba(${cr},${cg2},${cb},${b.i * 0.42})`);
+        grad.addColorStop(1, `rgba(${cr},${cg2},${cb},0)`);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, s, s);
+      }
+    },
+  };
+
+  function drawNebula() {
+    if (!neb.g) return;
+    const { w, h } = state;
+    const cover = Math.max(w, h) * MW.COVER_FACTOR;
+    const s = neb.size;
+    const scale = cover / s;
+    const drift = state.calm ? 0 : 1;
+    const px = state.cx + state.camEase.x * 26 * drift;
+    const py = state.cy + state.camEase.y * 18 * drift;
+    const dw = s * scale, dh = s * scale;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.98;
+    // 关键：银河本体（glowCv）与颗粒层（cv）必须用同一个偏移，
+    // 否则视差一动，暗尘蒙版就会和银河图像错位。
+    ctx.drawImage(neb.glowCv, px - dw / 2, py - dh / 2, dw, dh);
+    ctx.drawImage(neb.cv, px - dw / 2, py - dh / 2, dw, dh);
+    ctx.restore();
+  }
+
+  /* ---------- 光标交互状态 ----------
+     用于强化「移动光标」的反馈：光点拖尾、被点亮的星群、涟漪。 */
+  const cursor = {
+    x: -9999, y: -9999,      // 当前位置
+    px: -9999, py: -9999,    // 上一帧位置（算速度用）
+    boost: 0,                // 0~1：靠近光标的亮度增强强度
+    speed: 0,                // 归一化移动速度
+    trail: [],               // 拖尾粒子
+    acc: 0,                  // 拖尾生成累加器
+    pool: [],                // 固定数量的拖尾粒子池
+    MAX: 120,
+    ripples: [],              // 快速移动时扩散的涟漪
+  };
+  for (let i = 0; i < cursor.MAX; i++) {
+    cursor.pool.push({ x: 0, y: 0, vx: 0, vy: 0, life: 0, r: 1, hue: 0 });
+  }
+
+  /* ---------- 星星 ---------- */
+  // 层：0 远（小、多、最淡） → 2 近（大、少、视差最明显）
+  const LAYER_CONF = [
+    { share: 0.56, min: 0.45, max: 0.95, alpha: [0.30, 0.66], velocity: [0.5, 1.05] },
+    { share: 0.30, min: 0.85, max: 1.60, alpha: [0.52, 0.95], velocity: [0.4, 0.95] },
+    { share: 0.14, min: 1.45, max: 2.70, alpha: [0.68, 1.00], velocity: [0.3, 0.75] },
+  ];
+  /* 恒星配色：按真实光谱型的出现比例分配，所以「五颜六色」但不假。
+     O/B 蓝 → A 蓝白 → F 暖白 → G 黄（太阳） → K 橙 → M 红（占绝大多数） */
+  const STAR_PALETTE = [
+    { c: [155, 190, 255], w: 1.0 },   // O/B 炽蓝
+    { c: [196, 218, 255], w: 3.0 },   // B 蓝白
+    { c: [226, 238, 255], w: 8.0 },   // A 冷白
+    { c: [255, 252, 240], w: 13.0 },  // F 暖白
+    { c: [255, 238, 196], w: 17.0 },  // G 黄（太阳）
+    { c: [255, 212, 152], w: 24.0 },  // K 橙
+    { c: [255, 178, 132], w: 16.0 },  // K 偏红
+    { c: [255, 146, 118], w: 9.0 },   // M 红
+    { c: [255, 128, 150], w: 3.0 },   // 红 + 一点粉（红巨星/发射线星）
+  ];
+  const STAR_TOTAL_W = STAR_PALETTE.reduce((a, p) => a + p.w, 0);
+
+  function pickStarColor() {
+    let r = Math.random() * STAR_TOTAL_W;
+    for (const p of STAR_PALETTE) { r -= p.w; if (r <= 0) return p.c; }
+    return STAR_PALETTE[3].c;
+  }
+
+  // 越亮的星越接近白色（真实的过曝效应），所以白化程度随尺寸上升；
+  // 小星虽然暗，但保留完整的色相，这样满屏才真的「五颜六色」。
+  function tuneColor(c, size, big) {
+    const k = big ? 0.82 : clamp(0.60 + 0.30 * (size - 0.4), 0.55, 0.92);
+    return [
+      Math.round(c[0] + (255 - c[0]) * k),
+      Math.round(c[1] + (255 - c[1]) * k),
+      Math.round(c[2] + (255 - c[2]) * k),
+    ];
+  }
+  const BIG_STARS = 34;
+
+  function starCount() {
+    const area = state.w * state.h;
+    let n = (area / 4000) * 0.85;
+    if (state.w < 640) n *= 0.7;              // 手机端减负
+    if (REDUCED.matches) n *= 0.55;
+    if (!FINE_POINTER.matches) n *= 0.85;
+    return clamp(Math.round(n), 140, 1400);
+  }
+
+  // 银河带里的星群：数量远多于场星，靠它们堆出「密度感」
+  function bandStarCount() {
+    const area = state.w * state.h;
+    let n = area / 5200;
+    if (state.w < 640) n *= 0.45;
+    if (REDUCED.matches) n *= 0.45;
+    return clamp(Math.round(n), 380, 2400);
+  }
+
+  // 屏幕坐标 → 银河带坐标（与 drawNebula 的贴图映射保持一致）
+  function toGalaxySpace(x, y) {
+    const cover = Math.max(state.w, state.h) * MW.COVER_FACTOR;
+    const q = cover / neb.size;
+    const gx = (x - state.cx) / cover + 0.5;
+    const gy = (y - state.cy) / cover + 0.5;
+    return { gx, gy, q };
+  }
+
+  function makeStar(depth, big) {
+    const conf = LAYER_CONF[depth];
+    const tint = pickStarColor();
+    let size;
+    if (big) {
+      size = rand(1.9, 3.3);
+    } else if (depth === 2) {
+      size = rand(conf.min, conf.max);
+    } else {
+      // 越暗的星越多
+      size = conf.min + Math.pow(Math.random(), 1.7) * (conf.max - conf.min);
+    }
+    const bright = big ? rand(0.72, 1) : rand(conf.alpha[0], conf.alpha[1]);
+    const color = tuneColor(tint, size, big);
+    return {
+      x: rand(0, state.w),
+      y: rand(0, state.h),
+      depth,
+      size,
+      bright,
+      tint,
+      color,
+      base: depth === 0 ? 0.055 : rand(0.05, 0.14),  // 每秒的闪烁幅度
+      spd: rand(conf.velocity[0], conf.velocity[1]),  // 闪烁频率基数
+      ph: rand(0, TAU),
+      drift: rand(0.6, 1.5),
+    };
+  }
+
+  function seedStars() {
+    const n = starCount();
+    let bigLeft = Math.min(BIG_STARS, Math.round(n * 0.05));
+    state.stars = [];
+    for (let i = 0; i < n; i++) {
+      const roll = Math.random();
+      let depth = 0;
+      if (roll > LAYER_CONF[0].share + LAYER_CONF[1].share) depth = 2;
+      else if (roll > LAYER_CONF[0].share) depth = 1;
+      const big = bigLeft > 0 && (depth === 2 ? Math.random() < 0.34 : Math.random() < 0.05);
+      if (big) bigLeft--;
+      state.stars.push(makeStar(depth, big));
+    }
+    // 按层排序可减少绘制状态切换（这里仅按深度聚合，视觉无差别）
+    state.stars.sort((a, b) => a.depth - b.depth);
+    seedBandStars();
+  }
+
+  // 沿带轴分布银河恒星：中心多、两端少，颜色随核球距离由暖转冷
+  const BAND_COLORS = [
+    [255, 246, 226], [255, 238, 202], [255, 228, 184],
+    [255, 244, 224], [250, 238, 226],
+    [255, 255, 255], [255, 255, 255],
+    [224, 234, 255], [214, 226, 255], [200, 214, 255],
+  ];
+  function bandColor(u) {
+    const d = Math.min(1, Math.abs(u - galaxy.coreT) / galaxy.coreWidth);
+    const s = u - galaxy.coreT;
+    const roll = Math.pow(Math.random(), 1 + 2.2 * d);  // 越远离核球越冷
+    const idx = roll < 0.48 ? (Math.random() * 3) | 0 : 3 + ((Math.random() * 7) | 0);
+    return {
+      tint: BAND_COLORS[idx],
+      warm: 1 + 0.85 * Math.exp(-s * s * 1.3),          // 核球附近更亮
+    };
+  }
+
+  function seedBandStars() {
+    const n = bandStarCount();
+    const list = [];
+    for (let i = 0; i < n; i++) {
+      // 拒绝采样：按银河的亮度剖面铺点，天然形成中间厚两端薄
+      let x = 0, y = 0, prof = 0, tries = 0;
+      do {
+        x = Math.random() * state.w;
+        y = Math.random() * state.h;
+        const g = toGalaxySpace(x, y);
+        const c = galaxy.coords(g.gx, g.gy);
+        prof = galaxy.profile(c.p, c.t, c.u) * galaxy.falloff(c.t);
+        tries++;
+      } while (prof < 0.035 + Math.random() * 0.42 && tries < 46);
+
+      const g = toGalaxySpace(x, y);
+      const c = galaxy.coords(g.gx, g.gy);
+      const u = c.u;
+      const near = Math.exp(-Math.pow((u - galaxy.coreT) / galaxy.coreWidth, 2));
+
+      // 深度偏远景，避免视差把带内星群拉散
+      const depth = Math.random() < 0.46 ? 0 : Math.random() < 0.74 ? 1 : 2;
+      const conf = LAYER_CONF[depth];
+      const size = clamp(
+        rand(0.34, 0.78) + near * rand(0, 0.5) + (Math.random() < 0.015 ? rand(0.7, 1.5) : 0),
+        0.3, 2.35
+      );
+      const col = bandColor(u);
+      const color = tuneColor(col.tint, size, false);
+      list.push({
+        x, y, depth, size,
+        bright: clamp(rand(0.26, 0.6) * col.warm * (0.55 + 0.85 * Math.min(1, prof)), 0.08, 1),
+        tint: col.tint,
+        color,
+        base: rand(0.04, 0.13),
+        spd: rand(0.35, 1.0),
+        ph: rand(0, TAU),
+        drift: rand(0.6, 1.4),
+      });
+    }
+    list.sort((a, b) => a.depth - b.depth);
+    state.bandStars = list;
+  }
+
+  function seedDust() {
+    // 星尘避开银河带，免得把银河糊住
+    const d = clamp(Math.round((state.w * state.h) / 40000), 16, 56);
+    state.dust = [];
+    for (let i = 0; i < d; i++) {
+      const x = rand(0, state.w);
+      const y = rand(0, state.h);
+      const g = toGalaxySpace(x, y);
+      const c = galaxy.coords(g.gx, g.gy);
+      if (galaxy.profile(c.p, c.t, c.u) * galaxy.falloff(c.t) > 0.34) continue;
+      state.dust.push({
+        x, y,
+        z: rand(0.35, 1),
+        r: rand(0.5, 1.35),
+        ph: rand(0, TAU),
+        spd: rand(0.12, 0.4),
+        aspd: rand(-0.25, -0.04),
+      });
+    }
+  }
+
+  function drawStars(list) {
+    const { camEase } = state;
+    const calm = state.calm;
+    // 光标增强：靠近光标的星被点亮（独立于 canvas 视差，用真实屏幕坐标判定）
+    const boost = cursor.boost;
+    const CURSOR_R = 190;
+    const cx0 = cursor.x, cy0 = cursor.y;
+    // 局部坐标 → 屏幕坐标的映射：相机向右移动，星星向左走
+    const cs = Math.cos(-camEase.x * 0.22);
+    const sn = Math.sin(-camEase.x * 0.22);
+    const spd = Math.hypot(camEase.x, camEase.y);
+    ctx.save();
+    if (!calm) ctx.globalCompositeOperation = 'lighter';
+
+    const frozen = REDUCED.matches || calm;
+
+    for (let i = 0; i < list.length; i++) {
+      const st = list[i];
+      const depth = state.layers[st.depth];
+      let x = st.x - camEase.x * 42 * depth;
+      let y = st.y - camEase.y * 30 * depth;
+
+      // 环绕包裹
+      const m = 6;
+      if (x < -m) x += state.w + m * 2;
+      else if (x > state.w + m) x -= state.w + m * 2;
+      if (y < -m) y += state.h + m * 2;
+      else if (y > state.h + m) y -= state.h + m * 2;
+
+      const dx0 = x - cx0, dy0 = y - cy0;
+      const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+
+      // 颜色在循环开头确定，后面的星芒 / 光晕 / 核心都用它
+      let cr = st.color[0], cg = st.color[1], cb = st.color[2];
+
+      let a = st.bright;
+      if (!frozen) {
+        a *= 1 - st.base + st.base * (0.5 + 0.5 * Math.sin(state.t * st.spd + st.ph));
+      }
+
+      // 可见裁剪
+      const reach = st.size * 4.6 + 4;
+      if (x < -reach || x > state.w + reach || y < -reach || y > state.h + reach) continue;
+
+      // 十字星芒：只给最亮的大星，随闪烁呼吸
+      if (st.size > 2.05) {
+        const flare = st.size * 8 * (0.35 + 0.65 * clamp(a / st.bright, 0, 1.4));
+        ctx.globalAlpha = a * 0.20;
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},1)`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(x - flare, y); ctx.lineTo(x + flare, y);
+        ctx.moveTo(x, y - flare); ctx.lineTo(x, y + flare);
+        ctx.stroke();
+      }
+
+      // 拖尾（移动时出现，带轻微旋转，避免生硬的直线）
+      if (!frozen && spd > 0.03 && st.size > 1.05) {
+        const tx = camEase.x * 20 * depth * st.drift;
+        const ty = camEase.y * 14 * depth * st.drift;
+        const lx = tx * cs - ty * sn;
+        const ly = tx * sn + ty * cs;
+        ctx.globalAlpha = a * 0.16;
+        ctx.strokeStyle = 'rgba(255,255,255,1)';
+        ctx.lineWidth = st.size * 0.75;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + lx, y + ly);
+        ctx.stroke();
+      }
+
+      // —— 光标交互：靠近光标的星被点亮、变大、色相更明显 ——
+      let sizeMul = 1;
+      if (boost > 0) {
+        const near = 1 - clamp(dist / CURSOR_R, 0, 1);
+        if (near > 0) {
+          const kk = near * near * boost;
+          a = Math.min(2.4, a * (1 + kk * 4.0));
+          sizeMul = 1 + kk * 1.45;
+          cr = Math.round(cr + (255 - cr) * Math.min(1, kk * 0.45));
+          cg = Math.round(cg + (255 - cg) * Math.min(1, kk * 0.45));
+          cb = Math.round(cb + (255 - cb) * Math.min(1, kk * 0.45));
+        }
+      }
+      const ssz = st.size * sizeMul;
+
+      // 大星：柔光贴图
+      if (st.size > 1.25) {
+        const lv = clamp(Math.round(a * (GLOW_LEVELS - 1)), 0, GLOW_LEVELS - 1);
+        const sp = glowSprites[lv];
+        const full = ssz * (boost > 0 ? 12.5 : 6.5);
+        ctx.globalAlpha = boost > 0 ? 0.55 + 0.35 * boost : 0.55;
+        ctx.drawImage(sp, x - full / 2, y - full / 2, full, full);
+      }
+
+      // 核心：极小的点用矩形（更快），稍大的用圆
+      ctx.globalAlpha = clamp(a, 0, 1);
+      ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+      if (ssz <= 1.15) {
+        const s2 = ssz * 1.4;
+        ctx.fillRect(x - s2 / 2, y - s2 / 2, s2, s2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, ssz, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ---------- 光标：拖尾、涟漪、星群点亮 ---------- */
+  function updateCursor(dt) {
+    const dx = cursor.x - cursor.px;
+    const dy = cursor.y - cursor.py;
+    const dist = Math.hypot(dx, dy);
+    // 光标刚进入页面时先对齐，避免第一帧出现一条长尾巴
+    if (cursor.px < -9000) { cursor.px = cursor.x; cursor.py = cursor.y; return; }
+
+    cursor.speed = clamp(dist / Math.max(1, dt * 900), 0, 1);
+    // 光标已停下时，增强效果缓慢退去（不会突然熄灭）
+    const ease = cursor.speed > 0.02 ? clamp(dt * 6, 0, 1) : clamp(dt * 0.8, 0, 1);
+    cursor.boost += (cursor.speed - cursor.boost) * ease;
+
+    // 生成拖尾粒子：速度快时更密
+    cursor.acc += dist * (0.55 + cursor.speed * 0.9);
+    let guard = 0;
+    while (cursor.acc > 9 && guard++ < 12) {
+      cursor.acc -= 9;
+      const p = cursor.pool.find((q) => q.life <= 0);
+      if (!p) break;
+      const ang = Math.random() * TAU;
+      const spread = rand(4, 30) * (0.4 + cursor.speed);
+      p.x = cursor.x + rand(-3, 3);
+      p.y = cursor.y + rand(-3, 3);
+      p.vx = Math.cos(ang) * spread - dx * 2.2;
+      p.vy = Math.sin(ang) * spread - dy * 2.2;
+      p.life = 1;
+      p.r = rand(1.0, 3.0);
+      p.hue = Math.random();
+    }
+
+    // 快速移动时留下扩散的涟漪
+    cursor.rippleAcc = (cursor.rippleAcc || 0) + dist;
+    if (cursor.speed > 0.22 && cursor.rippleAcc > 190) {
+      cursor.rippleAcc = 0;
+      cursor.ripples.push({ x: cursor.x, y: cursor.y, t: 0 });
+      if (cursor.ripples.length > 10) cursor.ripples.shift();
+    }
+    for (let i = cursor.ripples.length - 1; i >= 0; i--) {
+      const r = cursor.ripples[i];
+      r.t += dt;
+      if (r.t > 1.15) cursor.ripples.splice(i, 1);
+    }
+
+    // 更新粒子
+    for (const p of cursor.pool) {
+      if (p.life <= 0) continue;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 1 - clamp(dt * 1.4, 0, 1);
+      p.vy *= 1 - clamp(dt * 1.4, 0, 1);
+      p.life -= dt * rand(1.1, 1.9);
+    }
+
+    cursor.px = cursor.x;
+    cursor.py = cursor.y;
+  }
+
+  function drawCursor() {
+    if (cursor.x < -9000) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // 拖尾：用彩色发光贴图，颜色偏蓝白到暖白
+    for (const p of cursor.pool) {
+      if (p.life <= 0) continue;
+      const a = clamp(p.life, 0, 1);
+      const sp = glowSprites[clamp(Math.round(a * 9), 0, 9)];
+      const d = p.r * 12 * (0.6 + a * 0.9);
+      ctx.globalAlpha = a * 0.62;
+      ctx.drawImage(sp, p.x - d / 2, p.y - d / 2, d, d);
+      ctx.globalAlpha = a * 0.85;
+      ctx.fillStyle = p.hue < 0.3 ? '#dce8ff' : (p.hue < 0.65 ? '#ffffff' : '#ffe7c4');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (0.5 + a * 0.6), 0, TAU);
+      ctx.fill();
+    }
+
+    // 涟漪：快速移动时留下的扩散圆环
+    for (const r of cursor.ripples) {
+      const k = r.t / 1.15;
+      const rad = 16 + k * 96;
+      ctx.globalAlpha = (1 - k) * (1 - k) * 0.42;
+      ctx.strokeStyle = '#cfe0ff';
+      ctx.lineWidth = 1.6 * (1 - k) + 0.4;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+    }
+
+    // 光标本体：柔和的星芒（随移动速度变亮变大）
+    const live = cursor.boost;
+    const R = 34 + live * 40;
+    ctx.globalAlpha = 0.22 + live * 0.45;
+    ctx.drawImage(halo, cursor.x - R, cursor.y - R, R * 2, R * 2);
+
+    if (live > 0.06) {
+      const flare = (10 + live * 14) * (0.8 + 0.2 * Math.sin(state.t * 6));
+      ctx.globalAlpha = 0.10 + live * 0.22;
+      ctx.strokeStyle = '#eaf2ff';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cursor.x - flare, cursor.y); ctx.lineTo(cursor.x + flare, cursor.y);
+      ctx.moveTo(cursor.x, cursor.y - flare); ctx.lineTo(cursor.x, cursor.y + flare);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- 星尘（缓慢旋转漂浮） ---------- */
+  function drawDust() {
+    const { dust, camEase, w, h } = state;
+    const frozen = REDUCED.matches;
+    const t = frozen ? 0 : state.t;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of dust) {
+      const ang = t * p.aspd + p.ph;
+      const wob = Math.sin(t * p.spd + p.ph) * 8 * p.z;
+      const x = p.x - camEase.x * 70 * p.z + wob;
+      const y = p.y - camEase.y * 50 * p.z + Math.cos(ang) * 10 * p.z;
+      if (x < -8 || x > w + 8 || y < -8 || y > h + 8) continue;
+      const a = 0.05 + 0.09 * (0.5 + 0.5 * Math.sin(t * p.spd * 1.6 + p.ph));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#cfe0ff';
+      ctx.beginPath();
+      ctx.arc(x, y, p.r * p.z, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- 流星 ---------- */
+  function spawnMeteor(force) {
+    const { w, h } = state;
+    // 掉落角度：统一朝右下方（偶尔更接近垂直），并带一点随机抖动
+    const angle = rand(0.92, 1.35);           // 弧度
+    const speed = rand(560, 1250);
+    const vx = Math.cos(angle) * speed;
+    const vy = Math.sin(angle) * speed;
+    // 从画面上方或左上角进场（向右下坠落时，这两个起点都能覆盖全屏）
+    const fromTop = Math.random() < 0.55;
+    const x = fromTop ? rand(0.05, 1.05) * w : rand(-0.18, 0.22) * w;
+    const y = fromTop ? rand(-0.28, -0.04) * h : rand(-0.05, 0.3) * h;
+
+    state.meteors.push({
+      x, y, vx, vy,
+      len: rand(140, 340) * (force ? 1.9 : 1),
+      life: 1,
+      decay: force ? rand(0.16, 0.28) : rand(0.26, 0.52),
+      width: force ? rand(2.2, 3.6) : rand(0.9, 2.2),
+      large: force || Math.random() < 0.3,
+      fireball: force,
+    });
+  }
+
+  function drawMeteors(dt) {
+    const list = state.meteors;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let i = list.length - 1; i >= 0; i--) {
+      const mt = list[i];
+      mt.x += mt.vx * dt;
+      mt.y += mt.vy * dt;
+      mt.life -= mt.decay * dt;
+
+      if (mt.life <= 0 || mt.x < -state.w * 0.5 || mt.x > state.w * 1.5 || mt.y > state.h * 1.4) {
+        list.splice(i, 1);
+        continue;
+      }
+
+      const sp = Math.hypot(mt.vx, mt.vy) || 1;
+      const ux = mt.vx / sp, uy = mt.vy / sp;
+      const tail = mt.len * (0.45 + 0.55 * clamp(mt.life, 0, 1));
+      const tx = mt.x - ux * tail;
+      const ty = mt.y - uy * tail;
+
+      const fade = Math.sin(clamp(mt.life, 0, 1) * Math.PI); // 首尾淡入淡出
+      const fb = mt.fireball;
+      const grad = ctx.createLinearGradient(mt.x, mt.y, tx, ty);
+      grad.addColorStop(0, `rgba(255,255,255,${(fb ? 1 : 0.95) * fade})`);
+      grad.addColorStop(0.16, fb
+        ? `rgba(255,236,196,${0.78 * fade})`
+        : `rgba(214,232,255,${0.62 * fade})`);
+      grad.addColorStop(0.5, fb
+        ? `rgba(255,196,120,${0.30 * fade})`
+        : `rgba(150,190,255,${0.22 * fade})`);
+      grad.addColorStop(1, fb ? 'rgba(255,160,90,0)' : 'rgba(120,160,255,0)');
+
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = mt.width;
+      ctx.beginPath();
+      ctx.moveTo(mt.x, mt.y);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+
+      // 流星头部柔光
+      const orb = (fb ? 54 : mt.large ? 30 : 20) * (0.6 + 0.4 * fade);
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.drawImage(halo, mt.x - orb / 2, mt.y - orb / 2, orb, orb);
+
+      // 残余的散点
+      if (mt.large && Math.random() < 0.5) {
+        ctx.globalAlpha = 0.35 * fade;
+        ctx.fillStyle = '#dfeaff';
+        for (let k = 0; k < 2; k++) {
+          const q = rand(0, 1);
+          const qx = mt.x - ux * tail * q + rand(-4, 4);
+          const qy = mt.y - uy * tail * q + rand(-4, 4);
+          ctx.fillRect(qx, qy, 1.2, 1.2);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ---------- 点击星尘扩散 ---------- */
+  function burst(x, y) {
+    const particles = [];
+    const n = REDUCED.matches ? 14 : 30;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU;
+      const s = rand(18, 130);
+      particles.push({
+        x, y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s * 0.7,
+        r: rand(0.7, 2.0),
+        life: 1,
+        decay: rand(0.5, 1.0),
+        ph: rand(0, TAU),
+      });
+    }
+    state.bursts.push({ particles, t: 0, max: 5.2 });
+  }
+
+  function drawBursts(dt) {
+    const list = state.bursts;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = list.length - 1; i >= 0; i--) {
+      const b = list[i];
+      b.t += dt;
+      if (b.t > b.max) { list.splice(i, 1); continue; }
+      const spread = 1 + b.t * 0.55;
+      for (const p of b.particles) {
+        const px = p.x + p.vx * b.t * spread * 0.6;
+        const py = p.y + p.vy * b.t * spread * 0.6 + 14 * b.t * b.t * 0.3;
+        p.life -= p.decay * dt;
+        if (p.life <= 0) continue;
+        const a = clamp(p.life, 0, 1) * 0.9;
+        const tw = 0.72 + 0.28 * Math.sin(b.t * 3 + p.ph);
+        const sz = p.r * (1.6 + 7 * (1 - p.life));
+        ctx.globalAlpha = a * 0.45 * tw;
+        ctx.drawImage(glowSprites[6], px - sz / 2, py - sz / 2, sz, sz);
+        ctx.globalAlpha = a * tw;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(px, py, p.r * 0.8, 0, TAU);
+        ctx.fill();
+      }
+      // 中心涟漪
+      if (b.t < 1.6) {
+        const rp = (b.t / 1.6) * 120;
+        ctx.globalAlpha = (1 - b.t / 1.6) * 0.16;
+        ctx.strokeStyle = '#cfe2ff';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(b.particles[0].x, b.particles[0].y, rp, 0, TAU);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  /* ---------- 主循环 ---------- */
+  function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+    state.w = w;
+    state.h = h;
+    state.dpr = dpr;
+    state.cx = w / 2;
+    state.cy = h / 2;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    // 背景层用较小系数
+    state.layers = [0.35, 0.62, 1.0];
+    neb.build(w, h);
+    seedStars();
+    seedDust();
+  }
+
+  function frame(now) {
+    if (!state.running) return;
+    requestAnimationFrame(frame);
+
+    const raw = state.last ? (now - state.last) / 1000 : 1 / 60;
+    state.last = now;
+    const dt = clamp(raw, 0.001, 1 / 20);
+    state.t += dt;
+
+    // 镜头缓动
+    state.camEase.x += (state.cam.x - state.camEase.x) * clamp(dt * 2.6, 0, 1);
+    state.camEase.y += (state.cam.y - state.camEase.y) * clamp(dt * 2.6, 0, 1);
+
+    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#02030a';
+    ctx.fillRect(0, 0, state.w, state.h);
+
+    if (!state.calm) neb.draw(state.t);
+    drawNebula();
+    updateCursor(dt);
+    drawStars(state.stars);
+    drawStars(state.bandStars);   // 银河带内的星群，压在带轴最亮处
+    if (!state.calm) drawDust();
+    if (!state.calm && !REDUCED.matches) {
+      state.nextMeteor -= dt;
+      if (state.nextMeteor <= 0) {
+        // 允许天上同时有多颗流星；数量越多，间隔越长，避免糊成一片
+        const live = state.meteors.length;
+        const maxLive = state.w < 640 ? 4 : 7;
+        if (live < maxLive) {
+          const fireball = Math.random() < 1 / 14;      // 偶发的火流星
+          spawnMeteor(fireball);
+          // 火流星之后可以再来一颗小的，形成「流星雨」的感觉
+          if (Math.random() < 0.35 && live + 1 < maxLive) setTimeout(() => spawnMeteor(false), rand(90, 260));
+        }
+        const base = rand(1.3, 4.2);
+        state.nextMeteor = base * (1 + live * 0.45);
+      }
+      drawMeteors(dt);
+    }
+    drawBursts(dt);
+    if (!state.calm && FINE_POINTER.matches) drawCursor();
+  }
+
+  /* ---------- 输入 ---------- */
+  const glow = document.getElementById('glow');
+  let glowX = window.innerWidth / 2, glowY = window.innerHeight / 2;
+  let glowTX = glowX, glowTY = glowY;
+  let pointerActive = false;
+
+  function onPointerMove(e) {
+    pointerActive = true;
+    cursor.x = e.clientX;
+    cursor.y = e.clientY;
+    const nx = (e.clientX / state.w) * 2 - 1;
+    const ny = (e.clientY / state.h) * 2 - 1;
+    state.cam.x = clamp(nx, -1, 1);
+    state.cam.y = clamp(ny, -1, 1);
+    glowTX = e.clientX;
+    glowTY = e.clientY;
+  }
+
+  function onPointerLeave() {
+    state.cam.x = 0;
+    state.cam.y = 0;
+    cursor.x = -9999; cursor.y = -9999;   // 离开页面后停止拖尾与增强
+    cursor.boost = 0;
+  }
+
+  function onPointerDown(e) {
+    if (e.target.closest('button, a, blockquote')) return;
+    burst(e.clientX, e.clientY);
+  }
+
+  // 触摸端：拖动即视差
+  function onTouchMove(e) {
+    const t = e.touches[0];
+    if (!t) return;
+    onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+  }
+  // 触摸时把「光标」当作指尖，交互反馈同样生效
+  window.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (t) onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+  }, { passive: true });
+
+  // 陀螺仪（移动端轻微视差）
+  function onOrientation(e) {
+    if (e.gamma == null || e.beta == null) return;
+    state.cam.x = clamp(e.gamma / 34, -1, 1);
+    state.cam.y = clamp((e.beta - 45) / 34, -1, 1);
+  }
+
+  window.addEventListener('resize', () => {
+    clearTimeout(resize._tid);
+    resize._tid = setTimeout(resize, 160);
+  });
+  window.addEventListener('pointermove', onPointerMove, { passive: true });
+  window.addEventListener('pointerdown', onPointerDown, { passive: true });
+  document.addEventListener('pointerleave', onPointerLeave);
+  window.addEventListener('touchmove', onTouchMove, { passive: true });
+  window.addEventListener('deviceorientation', onOrientation);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      state.running = false;
+    } else if (!state.running) {
+      state.running = true;
+      state.last = 0;
+      requestAnimationFrame(frame);
+    }
+  });
+  document.addEventListener('selectstart', (e) => {
+    if (!e.target.closest('blockquote')) e.preventDefault();
+  });
+
+  /* ---------- 环境音（Web Audio 合成，无需音频文件） ---------- */
+  const Sound = (() => {
+    let ac = null, master = null, started = false, nodes = null;
+
+    function noiseBuffer(ctx, seconds) {
+      const len = Math.floor(ctx.sampleRate * seconds);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        // 粉噪声近似
+        b0 = 0.99765 * b0 + w * 0.0990460;
+        b1 = 0.96300 * b1 + w * 0.2965164;
+        b2 = 0.57000 * b2 + w * 1.0526913;
+        d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.22;
+      }
+      return buf;
+    }
+
+    function build() {
+      const ctx = ac;
+      const out = ctx.createGain();
+      out.gain.value = 0;
+      out.connect(ctx.destination);
+
+      // — 低频垫音（温暖的 Drone）
+      const pad = ctx.createGain();
+      pad.gain.value = 0.30;
+      const filt = ctx.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.value = 760;
+      filt.Q.value = 0.6;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.06;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 240;
+      lfo.connect(lfoGain).connect(filt.frequency);
+      lfo.start();
+      filt.connect(pad).connect(out);
+
+      [55.0, 82.41, 110.0, 164.81, 220.0].forEach((f, i) => {
+        const o = ctx.createOscillator();
+        o.type = i < 2 ? 'sine' : 'triangle';
+        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+        const g = ctx.createGain();
+        g.gain.value = (i < 2 ? 0.55 : 0.14) / (i + 1);
+        // 极慢的音量呼吸
+        const fl = ctx.createOscillator();
+        fl.frequency.value = 0.03 + i * 0.017;
+        const fg = ctx.createGain();
+        fg.gain.value = g.gain.value * 0.6;
+        fl.connect(fg).connect(g.gain);
+        fl.start();
+        o.connect(g).connect(filt);
+        o.start();
+      });
+
+      // — 空气感：滤波噪声，缓慢起伏
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(ctx, 6);
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1300;
+      bp.Q.value = 0.35;
+      const air = ctx.createGain();
+      air.gain.value = 0.055;
+      const airLfo = ctx.createOscillator();
+      airLfo.frequency.value = 0.045;
+      const airLfoGain = ctx.createGain();
+      airLfoGain.gain.value = 0.035;
+      airLfo.connect(airLfoGain).connect(air.gain);
+      airLfo.start();
+      src.connect(bp).connect(air).connect(out);
+      src.start();
+
+      // — 偶发的颂钵泛音
+      const bellBus = ctx.createGain();
+      bellBus.gain.value = 0.5;
+      const bellDelay = ctx.createDelay(2.5);
+      bellDelay.delayTime.value = 1.6;
+      const bellFb = ctx.createGain();
+      bellFb.gain.value = 0.42;
+      const bellLp = ctx.createBiquadFilter();
+      bellLp.type = 'lowpass';
+      bellLp.frequency.value = 2400;
+      bellBus.connect(bellLp).connect(bellDelay).connect(bellFb).connect(bellDelay);
+      bellLp.connect(out);
+
+      const bellTimer = setInterval(() => {
+        if (!ac || ac.state !== 'running') return;
+        if (Math.random() < 0.45) return;
+        const t0 = ac.currentTime + Math.random() * 0.6;
+        const base = [523.25, 587.33, 659.25, 783.99][(Math.random() * 4) | 0];
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(0.075, t0 + 0.35);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 6.5);
+        g.connect(bellBus);
+        [1, 2.004, 2.98, 4.12].forEach((mult, i) => {
+          const o = ac.createOscillator();
+          o.type = 'sine';
+          o.frequency.value = base * mult;
+          const og = ac.createGain();
+          og.gain.value = [1, 0.42, 0.24, 0.12][i];
+          o.connect(og).connect(g);
+          o.start(t0);
+          o.stop(t0 + 7);
+        });
+      }, 6500);
+
+      nodes = { out, src, bellTimer };
+      started = true;
+    }
+
+    return {
+      async toggle(on) {
+        if (!ac) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return false;
+          ac = new AC();
+        }
+        if (ac.state === 'suspended') await ac.resume();
+        if (!started) build();
+        const now = ac.currentTime;
+        const target = on ? 0.5 : 0;
+        nodes.out.gain.cancelScheduledValues(now);
+        nodes.out.gain.setValueAtTime(nodes.out.gain.value, now);
+        nodes.out.gain.linearRampToValueAtTime(target, now + (on ? 4.5 : 1.6));
+        return true;
+      },
+      get available() {
+        return !!(window.AudioContext || window.webkitAudioContext);
+      },
+    };
+  })();
+
+  /* ---------- 呼吸引导 ---------- */
+  const Breath = (() => {
+    const orb = document.getElementById('orb');
+    const label = document.getElementById('breathText');
+    if (!orb || !label) return { setCalm() {} };
+
+    // 4-7-8：吸气 4s / 屏息 7s / 呼气 8s
+    // 这里只给出「相位 + 时长」，具体的缩放/亮度全部写在 CSS 里 ——
+    // 星尘土星的每个部件（环、星点、球面、核心）各自的过渡曲线不同，
+    // 用 JS 统一设 transitionDuration 会覆盖掉子元素的时长，反而不对。
+    const PHASES = [
+      { key: 'in', txt: '慢慢吸气', ms: 4000 },
+      { key: 'hold', txt: '轻轻停住', ms: 7000 },
+      { key: 'out', txt: '缓缓呼出', ms: 8000 },
+    ];
+    let i = 0, timer = 0, idleTimer = 0, engaged = false;
+
+    function apply(phase) {
+      // --dur 让整组部件共用同一个节奏；子元素用它作为过渡时长
+      orb.style.setProperty('--dur', phase.ms + 'ms');
+      orb.dataset.phase = phase.key;      // 触发 CSS 里的相位样式
+      label.textContent = phase.txt;
+    }
+
+    function tick() {
+      i = (i + 1) % PHASES.length;
+      apply(PHASES[i]);
+      timer = setTimeout(tick, PHASES[i].ms);
+    }
+
+    // 前 14 秒保持邀请语，之后自动进入呼吸节奏
+    function start() {
+      if (engaged) return;
+      engaged = true;
+      i = -1;
+      tick();
+    }
+
+    idleTimer = setTimeout(start, 14000);
+
+    return {
+      // 用户交互过就立刻开始
+      engage() {
+        if (!engaged) {
+          clearTimeout(idleTimer);
+          engaged = true;
+          i = -1;
+          tick();
+        }
+      },
+      setCalm(on) {
+        clearTimeout(timer);
+        if (on) {
+          label.textContent = '什么都不用做，只要在这里';
+          orb.style.setProperty('--dur', '1400ms');
+          orb.dataset.phase = 'idle';
+          engaged = true;
+        } else {
+          engaged = false;
+          i = -1;
+          tick();
+        }
+      },
+    };
+  })();
+
+  /* ---------- 控件 ---------- */
+  const soundBtn = document.getElementById('soundBtn');
+  const calmBtn = document.getElementById('calmBtn');
+  const quietNote = document.getElementById('quietNote');
+
+  if (soundBtn) {
+    if (!Sound.available) soundBtn.hidden = true;
+    soundBtn.addEventListener('click', async () => {
+      const on = soundBtn.getAttribute('aria-pressed') !== 'true';
+      const ok = await Sound.toggle(on);
+      soundBtn.setAttribute('aria-pressed', String(ok && on));
+      soundBtn.classList.toggle('is-on', ok && on);
+      const lbl = soundBtn.querySelector('.btn-label');
+      if (lbl) lbl.textContent = ok && on ? '关闭环境音' : '开启环境音';
+      Breath.engage();
+    });
+  }
+
+  if (calmBtn) {
+    calmBtn.addEventListener('click', () => {
+      state.calm = !state.calm;
+      calmBtn.setAttribute('aria-pressed', String(state.calm));
+      calmBtn.classList.toggle('is-on', state.calm);
+      document.body.classList.toggle('is-calm', state.calm);
+      if (quietNote) quietNote.hidden = !state.calm;
+      const lbl = calmBtn.querySelector('.btn-label');
+      if (lbl) lbl.textContent = state.calm ? '回到星空' : '更安静一点';
+      Breath.setCalm(state.calm);
+      if (state.calm) state.meteors.length = 0;
+    });
+  }
+
+  // 任意首次交互 → 呼吸引导进入节奏
+  ['pointerdown', 'keydown', 'touchstart'].forEach((ev) => {
+    window.addEventListener(ev, () => Breath.engage(), { once: true, passive: true });
+  });
+
+  // 光标光晕跟随（独立于 canvas 帧率）
+  (function glowLoop() {
+    if (glow) {
+      glowX += (glowTX - glowX) * 0.12;
+      glowY += (glowTY - glowY) * 0.12;
+      glow.style.setProperty('--gx', glowX.toFixed(1) + 'px');
+      glow.style.setProperty('--gy', glowY.toFixed(1) + 'px');
+      if (pointerActive && glow.style.opacity !== '1') glow.style.opacity = '1';
+    }
+    requestAnimationFrame(glowLoop);
+  })();
+
+  REDUCED.addEventListener?.('change', () => {
+    resize();
+  });
+
+  // 测试用：把内部对象暴露出来，便于自动化检查分层贡献（页面上不会用到）
+  if (typeof globalThis !== 'undefined' && globalThis.__EXPOSE__) {
+    globalThis.__DSH_INTERNALS__ = { neb, galaxy, state, seedStars, seedBandStars, seedDust, resize, drawStars, drawNebula, frame };
+  }
+
+  /* ---------- 诊断模式（仅 ?diag=1 时启用，不影响正常使用）----------
+     浏览器里的实际布局值只有浏览器自己知道。与其靠推理，不如把它显示出来。 */
+  if (typeof location !== 'undefined' && /[?&]diag=1/.test(location.search)) {
+    const box = document.createElement('pre');
+    box.style.cssText = [
+      'position:fixed', 'left:8px', 'bottom:8px', 'z-index:99',
+      'margin:0', 'padding:10px 12px', 'border-radius:8px',
+      'background:rgba(0,0,0,.82)', 'color:#cfe0ff',
+      'font:11px/1.7 ui-monospace,Menlo,monospace',
+      'white-space:pre', 'pointer-events:none',
+    ].join(';');
+    document.body.appendChild(box);
+    const stage = document.getElementById('stage');
+    const sky = document.getElementById('sky');
+    const orb = document.getElementById('orb');
+    const read = () => {
+      const cs = getComputedStyle(document.documentElement);
+      const vw = window.innerWidth;
+      const sr = stage.getBoundingClientRect();
+      const sk = sky.getBoundingClientRect();
+      const or = orb.getBoundingClientRect();
+      const t = document.getElementById('breathText');
+      box.textContent = [
+        `视口      ${vw} × ${window.innerHeight}   dpr=${window.devicePixelRatio}`,
+        `--scale   ${cs.getPropertyValue('--scale').trim()}`,
+        `--sky-scale ${cs.getPropertyValue('--sky-scale').trim()}`,
+        `内容块     ${sr.width.toFixed(1)} × ${sr.height.toFixed(1)}   占屏 ${(sr.width / vw * 100).toFixed(1)}%`,
+        `实测缩放   ${scaleState.scale.toFixed(3)}   （星空 ${scaleState.skyScale.toFixed(3)}）`,
+        `computed   ${getComputedStyle(stage).transform}`,
+        `  位置     left=${sr.left.toFixed(1)}  top=${sr.top.toFixed(1)}`,
+        `星空       ${sk.width.toFixed(1)} × ${sk.height.toFixed(1)}`,
+        `呼吸土星   ${or.width.toFixed(1)} × ${or.height.toFixed(1)}   占内容宽 ${(or.width / sr.width * 100).toFixed(1)}%`,
+        `标题字号   ${getComputedStyle(document.querySelector('.title')).fontSize}`,
+        `正文       ${getComputedStyle(t).fontSize}`,
+        `（把这几行发我即可）`,
+      ].join('\n');
+    };
+    read();
+    let raf2 = 0;
+    window.addEventListener('resize', () => { cancelAnimationFrame(raf2); raf2 = requestAnimationFrame(read); });
+  }
+
+  /* ---------- 构图缩放（JS 直接写数值）----------
+     为什么不用 CSS：zoom: var(--scale) 与 transform: scale(var(--scale))
+     在实测中都被浏览器忽略（诊断面板里「内容块 540.0」正好等于 CSS 写死的宽度，
+     说明缩放根本没发生）。与其继续和 CSS 变量解析规则纠缠，
+     不如把算好的数字直接写进 style —— 没有歧义。
+     系数 = 目标渲染宽 / 构图基准宽；下限 0.75 保证小屏正文不小于约 12px。 */
+  const COMPOSE_W = 540;
+  const scaleState = { scale: 1, skyScale: 1 };
+  function applyComposeScale() {
+    const vw = window.innerWidth || 1280;
+    const scale = Math.min(4, Math.max(0.75, (vw * 0.5) / COMPOSE_W));
+    const stage = document.getElementById('stage');
+    if (stage) {
+      stage.style.transform = 'scale(' + scale + ')';
+      stage.style.transformOrigin = 'top left';
+      // transform 不参与布局：用负边距把缩放后多出来的空间收掉
+      stage.style.marginBottom = 'calc(100svh * ' + (scale - 1) + ')';
+    }
+    // 星空跟随放大，但上限小一些（可视面积变大会增加合成开销）
+    const skyScale = Math.min(1.32, Math.max(1, vw / 900));
+    const sky = document.getElementById('sky');
+    if (sky) sky.style.transform = 'scale(' + skyScale + ') translateZ(0)';
+    scaleState.scale = scale;
+    scaleState.skyScale = skyScale;
+  }
+  let scaleRaf = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(scaleRaf);
+    scaleRaf = requestAnimationFrame(applyComposeScale);
+  });
+
+  /* ---------- 启动 ---------- */
+  resize();
+  applyComposeScale();          // 按视口算好构图缩放，直接写进 style
+  requestAnimationFrame(frame);
+  // 开场的两颗流星，作为「欢迎」
+  setTimeout(() => spawnMeteor(true), 1400);
+  setTimeout(() => spawnMeteor(false), 4200);
+})();
+</script>
+</body>
+</html>
