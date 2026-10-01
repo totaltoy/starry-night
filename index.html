@@ -627,18 +627,44 @@ body.is-calm .glow { opacity: 0.35 !important; }
 /* ---------- 响应式 ---------- */
 /* 单列 + 左对齐现在是全局默认，这里只处理太窄时呼吸球要小一点 */
 @media (max-width: 900px) {
-  .breath-orb { width: 132px; }
+  .breath-orb { width: clamp(120px, 34vw, 180px); }
+  .btn { min-height: 44px; padding: 11px 18px; font-size: 13.5px; letter-spacing: 0.08em; }
   .breath-text { letter-spacing: 0.2em; text-indent: 0; }
   .orb-ring { width: 102%; margin: -19.5% 0 0 -51%; }
   .sp { transform: rotate(var(--a)) translateX(51%) rotate(90deg) rotate(calc(-1 * var(--a))); }
   .br-wide { display: none; }
 }
 
+/* ---------- 手机：整套缩放逻辑在这里让位 ----------
+   宽屏用「540px 构图 + transform 缩放」实现占视口一半宽；
+   但手机上若照搬，布局宽 540 > 视口宽，浏览器会把整页缩小显示，
+   结果是正文只有 6~9px、按钮高 17px，既看不清也点不准。
+   所以 <900px 时取消 transform，回到正常流式布局，字号回到可读尺寸。 */
+@media (max-width: 900px) {
+  .stage { width: 100%; margin-bottom: 0; }
+}
+
 @media (max-width: 560px) {
   .hint { flex-direction: column; align-items: flex-start; gap: 8px; }
   .hint-sep { display: none; }
-  .breath-orb { width: 108px; }
   .glow { display: none; }
+
+  .title { font-size: min(clamp(2rem, 9.2vw, 2.9rem), calc((100vw - 40px) / 7.35)); }
+  .lede { font-size: 15px; line-height: 1.9; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.18em; }
+  .foot blockquote { font-size: 13.5px; }
+
+  /* 触控目标：至少 44px 高（Apple 与 Material 的推荐下限） */
+  .btn {
+    min-height: 46px;
+    padding: 13px 22px;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    gap: 10px;
+  }
+  .controls { gap: 12px; }
+  .btn-led { width: 7px; height: 7px; }
+  .quiet-note { font-size: 12.5px; }
 }
 
 /* 触屏设备：无需光标光晕 */
@@ -1693,7 +1719,10 @@ body.is-calm .glow { opacity: 0.35 !important; }
     // 光标刚进入页面时先对齐，避免第一帧出现一条长尾巴
     if (cursor.px < -9000) { cursor.px = cursor.x; cursor.py = cursor.y; return; }
 
-    cursor.speed = clamp(dist / Math.max(1, dt * 900), 0, 1);
+    // 触屏上手指点到哪儿算哪儿，没有"移动速度"这个概念，
+    // 所以直接给一个较高的基础值，保证一碰就有可见反馈。
+    const base = FINE_POINTER.matches ? 0 : 0.55;
+    cursor.speed = clamp(base + dist / Math.max(1, dt * 900), 0, 1);
     // 光标已停下时，增强效果缓慢退去（不会突然熄灭）
     const ease = cursor.speed > 0.02 ? clamp(dt * 6, 0, 1) : clamp(dt * 0.8, 0, 1);
     cursor.boost += (cursor.speed - cursor.boost) * ease;
@@ -2026,7 +2055,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
       drawMeteors(dt);
     }
     drawBursts(dt);
-    if (!state.calm && FINE_POINTER.matches) drawCursor();
+    if (!state.calm) drawCursor();   // 触屏同样绘制：指尖即光标
   }
 
   /* ---------- 输入 ---------- */
@@ -2054,7 +2083,15 @@ body.is-calm .glow { opacity: 0.35 !important; }
     cursor.boost = 0;
   }
 
+  // 触屏上 pointerdown 与 touchstart 会同时触发，若都处理会爆发两次星尘。
+  // 所以这里只接管鼠标；触摸由 pointerup / touchstart 负责。
   function onPointerDown(e) {
+    if (e.pointerType === 'touch') return;
+    if (e.target.closest('button, a, blockquote')) return;
+    burst(e.clientX, e.clientY);
+  }
+  function onPointerUp(e) {
+    if (e.pointerType !== 'touch') return;
     if (e.target.closest('button, a, blockquote')) return;
     burst(e.clientX, e.clientY);
   }
@@ -2084,6 +2121,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
   });
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   window.addEventListener('pointerdown', onPointerDown, { passive: true });
+  window.addEventListener('pointerup', onPointerUp, { passive: true });
   document.addEventListener('pointerleave', onPointerLeave);
   window.addEventListener('touchmove', onTouchMove, { passive: true });
   window.addEventListener('deviceorientation', onOrientation);
@@ -2412,10 +2450,28 @@ body.is-calm .glow { opacity: 0.35 !important; }
      系数 = 目标渲染宽 / 构图基准宽；下限 0.75 保证小屏正文不小于约 12px。 */
   const COMPOSE_W = 540;
   const scaleState = { scale: 1, skyScale: 1 };
+  // 与 CSS 里的断点保持一致：窄屏走正常流式布局，不做整页缩放
+  const MOBILE_MAX = 900;
   function applyComposeScale() {
     const vw = window.innerWidth || 1280;
-    const scale = Math.min(4, Math.max(0.75, (vw * 0.5) / COMPOSE_W));
     const stage = document.getElementById('stage');
+    const sky = document.getElementById('sky');
+
+    if (vw <= MOBILE_MAX) {
+      // 手机上必须取消 transform：否则布局宽(540)大于视口宽，
+      // 浏览器会把整页缩小显示，正文变成 6~9px、按钮高 17px。
+      if (stage) {
+        stage.style.transform = '';
+        stage.style.transformOrigin = '';
+        stage.style.marginBottom = '';
+      }
+      if (sky) sky.style.transform = 'translateZ(0)';
+      scaleState.scale = 1;
+      scaleState.skyScale = 1;
+      return;
+    }
+
+    const scale = Math.min(4, Math.max(1, (vw * 0.5) / COMPOSE_W));
     if (stage) {
       stage.style.transform = 'scale(' + scale + ')';
       stage.style.transformOrigin = 'top left';
@@ -2424,7 +2480,6 @@ body.is-calm .glow { opacity: 0.35 !important; }
     }
     // 星空跟随放大，但上限小一些（可视面积变大会增加合成开销）
     const skyScale = Math.min(1.32, Math.max(1, vw / 900));
-    const sky = document.getElementById('sky');
     if (sky) sky.style.transform = 'scale(' + skyScale + ') translateZ(0)';
     scaleState.scale = scale;
     scaleState.skyScale = skyScale;
