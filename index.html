@@ -2515,7 +2515,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
     /* 主音量上限。深空有 5 个正弦叠加，同相位时峰值可达单声部的数倍，
        所以留出余量，并在总线上再挂一个软限幅兜底 —— 削顶即使轻微也会显得刺耳。 */
-    const MASTER_PEAK = 0.72;
+    const MASTER_PEAK = 0.78;
 
     /* ---------- 工具 ---------- */
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
@@ -2600,9 +2600,12 @@ body.is-calm .glow { opacity: 0.35 !important; }
       // 全部换成正弦：正弦没有谐波，从根本上消除刺耳感。
       // 原来高两个音用三角波，是为了「亮一点」，代价就是那些谐波。
       // 音量分层也重排：低音略降、中音略抬，让厚度仍在但不轰。
+      // 峰值合计控制在 0.42 左右。之前是 0.46+0.30+0.15+0.075+0.045 ≈ 1.03，
+      // 已经越过软限幅阈值(-6dB≈0.5)，等于深空一直在被压缩 —— 听感会发闷发毛。
+      // 合计峰值约 0.63：够厚实，又基本不会长期触发限幅（阈值 -6dB ≈ 0.5）
       [
-        [55.0, 0.46], [82.41, 0.30], [110.0, 0.15],
-        [164.81, 0.075], [220.0, 0.045],
+        [55.0, 0.32], [82.41, 0.18], [110.0, 0.078],
+        [164.81, 0.032], [220.0, 0.016],
       ].forEach(([f, base], i) => {
         const o = ctx.createOscillator();
         o.type = 'sine';
@@ -2626,15 +2629,18 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
       // 颂钵：反馈延迟做长余韵，随机触发
       const bellBus = ctx.createGain();
-      bellBus.gain.value = 0.5;
+      bellBus.gain.value = 0.26;     // 让总线处的峰值落在 0.075 左右（见下方 partials）
       const delay = ctx.createDelay(2.5);
       delay.delayTime.value = 1.6;
       const fb = ctx.createGain();
-      fb.gain.value = 0.42;
+      fb.gain.value = 0.26;      // 收小反馈：原来 0.42，余韵叠太久会发浑
+      // 单独给颂钵一条 2.2kHz 低通：即使泛音算错了，也不会窜到刺耳的频段
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 2400;
-      bellBus.connect(lp).connect(delay).connect(fb).connect(delay);
+      lp.frequency.value = 2200;
+      lp.Q.value = 0.7;
+      bellBus.connect(lp);
+      lp.connect(delay).connect(fb).connect(delay);
       lp.connect(out);
 
       const strike = () => {
@@ -2642,21 +2648,29 @@ body.is-calm .glow { opacity: 0.35 !important; }
         const t0 = ac.currentTime + Math.random() * 0.6;
         // 音高整体下调一个八度内：原来最高到 784Hz，泛音很容易尖
         const base = [392.00, 440.00, 493.88, 587.33][(Math.random() * 4) | 0];
-        const g = ac.createGain();
-        g.gain.setValueAtTime(0, t0);
-        g.gain.linearRampToValueAtTime(0.055, t0 + 0.35);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 6.5);
-        g.connect(bellBus);
-        // 泛音幅度下调：4.12 倍那个原来约 880Hz×4.12≈3.6kHz，最刺
-        [1, 2.004, 2.98, 4.12].forEach((m, i) => {
+        /* 泛音表：[倍数, 幅度, 自身衰减秒数]
+           去掉了原来的 4.12 倍 —— 基频 392~587Hz 时它落在 1.6~2.4kHz，
+           正好是人耳最敏感、最容易觉得「刺」的频段。
+           并且让每个泛音单独衰减：高频衰减更快，这是真实钟磬的物理行为
+           （高频振动耗散更快），也是让音色变圆润的关键。 */
+        const partials = [
+          [1.000, 1.00, 6.0],
+          [2.004, 0.34, 4.2],
+          [2.980, 0.13, 2.2],
+          [3.960, 0.045, 1.2],
+        ];
+        partials.forEach(([m, amp, dec]) => {
           const o = ac.createOscillator();
-          o.type = 'sine';
+          o.type = 'sine';                       // 正弦：无谐波，不会额外变刺
           o.frequency.value = base * m;
           const og = ac.createGain();
-          og.gain.value = [1, 0.30, 0.13, 0.045][i];
-          o.connect(og).connect(g);
+          og.gain.setValueAtTime(0, t0);
+          // 0.075 是「总线处」期望峰值；除以总线增益才是各泛音该有的值
+          og.gain.linearRampToValueAtTime((amp * 0.075) / 0.26, t0 + 0.02 + m * 0.008);
+          og.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
+          o.connect(og).connect(bellBus);
           o.start(t0);
-          o.stop(t0 + 7);
+          o.stop(t0 + dec + 0.3);
         });
       };
       every(strike, 17);
@@ -2672,7 +2686,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
       lfo(ctx, 0.05, 220, bed.frequency);      // 雨势有缓急
       bed.connect(out);
       const bedGain = ctx.createGain();
-      bedGain.gain.value = 0.72;
+      bedGain.gain.value = 0.42;     // 原来 0.72，太接近限幅阈值(-6dB≈0.5)
       bedGain.connect(bed);
       loopNoise(ctx, brownBuffer(ctx, 8)).connect(bedGain);
 
@@ -2725,7 +2739,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
     /* ---------- 海浪：两个 LFO 同时扫音量与截止频率 ---------- */
     function waves(ctx, out) {
       const bed = ctx.createGain();
-      bed.gain.value = 0.34;                       // 基准，LFO 在其上起伏
+      bed.gain.value = 0.22;                       // 基准；LFO 会把它推到峰值附近
       const sw1 = ctx.createGain();
       sw1.gain.value = 1;
       bed.connect(sw1).connect(out);
@@ -2763,7 +2777,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
       lfo(ctx, 0.16, 70, rumble.frequency);
       rumble.connect(out);
       const rg = ctx.createGain();
-      rg.gain.value = 0.72;
+      rg.gain.value = 0.44;          // 同上，给限幅留出余量
       rg.connect(rumble);
       loopNoise(ctx, brownBuffer(ctx, 7)).connect(rg);
 
@@ -2800,7 +2814,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
     /* ---------- 森林夜：风声 + 虫鸣 ---------- */
     function forest(ctx, out) {
       const wind = ctx.createGain();
-      wind.gain.value = 0.3;
+      wind.gain.value = 0.20;
       lfo(ctx, 0.05, 0.16, wind.gain);
       lfo(ctx, 0.087, 0.07, wind.gain);
       wind.connect(out);
