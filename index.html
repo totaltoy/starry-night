@@ -950,6 +950,9 @@ body.is-calm .glow { opacity: 0.35 !important; }
               <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="forest">
                 <span class="snd-name">森林夜</span><span class="snd-desc">风声与虫鸣</span>
               </button>
+              <button class="snd-item" type="button" role="radio" aria-checked="false" data-scape="piano">
+                <span class="snd-name">琴</span><span class="snd-desc">稀疏的琶音</span>
+              </button>
             </div>
 
             <label class="snd-row">
@@ -2602,10 +2605,10 @@ body.is-calm .glow { opacity: 0.35 !important; }
       // 音量分层也重排：低音略降、中音略抬，让厚度仍在但不轰。
       // 峰值合计控制在 0.42 左右。之前是 0.46+0.30+0.15+0.075+0.045 ≈ 1.03，
       // 已经越过软限幅阈值(-6dB≈0.5)，等于深空一直在被压缩 —— 听感会发闷发毛。
-      // 合计峰值约 0.63：够厚实，又基本不会长期触发限幅（阈值 -6dB ≈ 0.5）
+      // 「深空」要的是若有若无，不是厚实。合计峰值约 0.2。
       [
-        [55.0, 0.32], [82.41, 0.18], [110.0, 0.078],
-        [164.81, 0.032], [220.0, 0.016],
+        [55.0, 0.100], [82.41, 0.055], [110.0, 0.024],
+        [164.81, 0.009], [220.0, 0.004],
       ].forEach(([f, base], i) => {
         const o = ctx.createOscillator();
         o.type = 'sine';
@@ -2619,8 +2622,8 @@ body.is-calm .glow { opacity: 0.35 !important; }
 
       // 空气：带通噪声，缓慢起伏
       const air = ctx.createGain();
-      air.gain.value = 0.042;
-      lfo(ctx, 0.045, 0.026, air.gain);
+      air.gain.value = 0.022;
+      lfo(ctx, 0.045, 0.014, air.gain);
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
       bp.frequency.value = 820;      // 原 1300Hz 偏嘶；降下来更像远处空气
@@ -2653,11 +2656,11 @@ body.is-calm .glow { opacity: 0.35 !important; }
            正好是人耳最敏感、最容易觉得「刺」的频段。
            并且让每个泛音单独衰减：高频衰减更快，这是真实钟磬的物理行为
            （高频振动耗散更快），也是让音色变圆润的关键。 */
+        // 只留两个泛音：基频 + 略失谐的八度。
+        // 去掉 2.98 / 3.96 后不再有金属感的高频，是柔和的钟磬而非「叮」。
         const partials = [
-          [1.000, 1.00, 6.0],
-          [2.004, 0.34, 4.2],
-          [2.980, 0.13, 2.2],
-          [3.960, 0.045, 1.2],
+          [1.000, 1.00, 9.5],      // 余韵拉长，收尾更绵
+          [2.004, 0.26, 6.5],
         ];
         partials.forEach(([m, amp, dec]) => {
           const o = ac.createOscillator();
@@ -2666,15 +2669,17 @@ body.is-calm .glow { opacity: 0.35 !important; }
           const og = ac.createGain();
           og.gain.setValueAtTime(0, t0);
           // 0.075 是「总线处」期望峰值；除以总线增益才是各泛音该有的值
-          og.gain.linearRampToValueAtTime((amp * 0.075) / 0.26, t0 + 0.02 + m * 0.008);
+          og.gain.linearRampToValueAtTime((amp * 0.030) / 0.26, t0 + 0.30 + m * 0.16);
           og.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
           o.connect(og).connect(bellBus);
           o.start(t0);
           o.stop(t0 + dec + 0.3);
         });
       };
-      every(strike, 17);
-      later(strike, 1200);          // 开起来先响一声，确认「有声音了」
+      // 「不要一直响」：随机间隔 28~75 秒，平均约 50 秒才响一次。
+      // 只用递归调度，不要再加 every() 兜底 —— 两者都调 strike 会变成一次响两下。
+      const scheduleStrike = () => { strike(); later(scheduleStrike, rand(28000, 75000)); };
+      later(scheduleStrike, rand(28000, 75000));
     }
 
     /* ---------- 雨：雨幕 + 雨滴 + 远雷 ---------- */
@@ -2734,6 +2739,90 @@ body.is-calm .glow { opacity: 0.35 !important; }
       };
       every(thunder, 46000);
       later(thunder, 16000);          // 第一声远雷不用等太久
+    }
+
+    /* ---------- 琴：稀疏的钢琴式琶音 + 极轻弦乐衬底 ----------
+       钢琴音色用加法合成近似：一个音由若干泛音叠成，
+       每个泛音的幅度与衰减时间都不同 —— 这是钢琴与「正弦长音」的本质差别。
+       音符从五声音阶里随机挑，间隔很长（平均 25 秒左右），
+       让相邻音符的余韵自然重叠成和声，而不是弹出一段旋律。 */
+    function piano(ctx, out) {
+      // 衬底：两层失谐锯齿过低通，只有极轻的颤动，提供「房间感」
+      const bedGain = ctx.createGain();
+      bedGain.gain.value = 0.030;
+      lfo(ctx, 0.047, 0.012, bedGain.gain);
+      const bedLp = ctx.createBiquadFilter();
+      bedLp.type = 'lowpass';
+      bedLp.frequency.value = 300;
+      bedLp.Q.value = 0.5;
+      bedLp.connect(bedGain).connect(out);
+      [110.0, 110.6].forEach((f) => {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        const g = ctx.createGain();
+        g.gain.value = 0.5;
+        o.connect(g).connect(bedLp);
+        o.start();
+      });
+
+      // 音符池：两个八度的五声音阶（去掉半音，随便挑都不会难听）
+      const SCALE = [
+        220.00, 246.94, 261.63, 293.66, 329.63,   // A3 B3 C4 D4 E4
+        392.00, 440.00, 493.88, 523.25, 587.33,   // G4 A4 B4 C5 D5
+        659.25, 783.99,                           // E5 G5
+      ];
+
+      const pluck = (freq, level) => {
+        if (!ac || ac.state !== 'running') return;
+        const t0 = ac.currentTime + rand(0.01, 0.12);
+        /* 钢琴的泛音比弦乐更丰富，且高频衰减更快。
+           [倍数, 相对幅度, 衰减秒数] —— 数值参考真实钢琴的频谱包络。 */
+        const parts = [
+          [1.000, 1.00, rand(6.0, 10.0)],
+          [2.004, 0.42, rand(3.6, 6.0)],
+          [3.010, 0.20, rand(2.0, 3.4)],
+          [4.020, 0.10, rand(1.1, 2.0)],
+          [5.040, 0.048, rand(0.6, 1.2)],
+          [6.070, 0.022, rand(0.35, 0.8)],
+        ];
+        const voice = ac.createGain();
+        voice.gain.value = level;
+        voice.connect(out);
+        for (const [m, amp, dec] of parts) {
+          const o = ac.createOscillator();
+          o.type = 'sine';                      // 正弦叠加 = 加法合成
+          o.frequency.value = freq * m;
+          const g = ac.createGain();
+          // 起音 6ms：够快才有「击弦」感，但不能有咔哒
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(amp * 0.075, t0 + 0.006);
+          // 前 1/4 衰减稍慢（钢琴的「延音」），之后再加快
+          g.gain.exponentialRampToValueAtTime(amp * 0.075 * 0.5, t0 + dec * 0.35);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
+          o.connect(g).connect(voice);
+          o.start(t0);
+          o.stop(t0 + dec + 0.2);
+        }
+      };
+
+      // 极稀疏：每个音之后随机等 14~42 秒
+      let lastIdx = -1;
+      const phrase = () => {
+        let i = (Math.random() * SCALE.length) | 0;
+        // 避免连续重复同一个音高
+        if (i === lastIdx) i = (i + 1 + ((Math.random() * 3) | 0)) % SCALE.length;
+        lastIdx = i;
+        pluck(SCALE[i], rand(0.6, 1.0));
+        // 偶尔补一个上方或下方的音，形成很短的两音动机
+        if (Math.random() < 0.35) {
+          const j = Math.max(0, Math.min(SCALE.length - 1,
+            i + (Math.random() < 0.5 ? 1 : 2) * (Math.random() < 0.7 ? 1 : -1)));
+          later(() => pluck(SCALE[j], rand(0.4, 0.7)), rand(700, 2200));
+        }
+        later(phrase, rand(14000, 42000));
+      };
+      later(phrase, rand(2500, 6000));
     }
 
     /* ---------- 海浪：两个 LFO 同时扫音量与截止频率 ---------- */
@@ -2853,13 +2942,22 @@ body.is-calm .glow { opacity: 0.35 !important; }
     }
 
     // 供自动化检查读取（见 .test/audio-check）：不改运行时行为
-    const SCAPES_SRC = { drone, rain, waves, fire, forest };
+    const SCAPES_SRC = { drone, rain, waves, fire, forest, piano };
+    /* 响度归一化系数。
+       来源：用假 AudioContext 记录每个声景的节点图，
+       按「各源 RMS² × 路径增益² 求和后开方」估算相对响度，
+       目标取各声景的中位数，补偿限制在 ±3 倍以内
+       （不取最轻的当基准 —— 那样会把雨和篝火压到几乎听不见，抹掉声景性格）。
+       琴偏轻是刻意的：稀疏音符的感知响度本就低。 */
+    const TRIM = { drone: 1.79, rain: 0.51, waves: 0.94, fire: 0.48, forest: 1.06, piano: 3.0 };
+
     const SCAPES = {
       drone:  { label: '深空',   build: drone  },
       rain:   { label: '雨',     build: rain   },
       waves:  { label: '海浪',   build: waves  },
       fire:   { label: '篝火',   build: fire   },
       forest: { label: '森林夜', build: forest },
+      piano:  { label: '琴',     build: piano  },
     };
 
     /* ---------- 生命周期 ---------- */
@@ -2868,6 +2966,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
       if (!scape) return;
       try { scape.gain.gain.cancelScheduledValues(ac.currentTime); } catch { /* 忽略 */ }
       try { scape.gain.disconnect(); } catch { /* 忽略 */ }
+      try { if (scape.trim) scape.trim.disconnect(); } catch { /* 忽略 */ }
       scape = null;
     }
 
@@ -2877,9 +2976,12 @@ body.is-calm .glow { opacity: 0.35 !important; }
       teardown();
       const g = ac.createGain();
       g.gain.value = 1;
-      g.connect(master);
+      // 声景各自的响度补偿，夹在声景输出与主控之间
+      const trim = ac.createGain();
+      trim.gain.value = TRIM[key] != null ? TRIM[key] : 1;
+      g.connect(trim).connect(master);
       def.build(ac, g);
-      scape = { key, gain: g };
+      scape = { key, gain: g, trim };
       currentKey = key;
       return true;
     }
