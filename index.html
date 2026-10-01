@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<meta name="starry-build" content="1001-601260" />
+<meta name="starry-build" content="1001-88abea" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>星野 · 今夜只听星光</title>
 <meta name="theme-color" content="#03040d" />
@@ -2606,29 +2606,40 @@ body.is-calm .glow { opacity: 0.35 !important; }
       // 音量分层也重排：低音略降、中音略抬，让厚度仍在但不轰。
       // 峰值合计控制在 0.42 左右。之前是 0.46+0.30+0.15+0.075+0.045 ≈ 1.03，
       // 已经越过软限幅阈值(-6dB≈0.5)，等于深空一直在被压缩 —— 听感会发闷发毛。
-      // 「深空」要的是若有若无，不是厚实。合计峰值约 0.2。
+      /* 音区抬高：去掉 55Hz 与 82.41Hz。
+         原因：这两个纯音相差 27.4Hz，会产生同频的差频（互调失真），
+         27Hz 接近次声 —— 听感不是「低音」而是胸闷式的搏动。
+         而且 82.41 与 110 又相差 27.6Hz，两个差频叠在同一处。
+         现在从 A2(110Hz) 起，按纯五度、八度排列，音程远大于临界带宽，
+         差频落在 50Hz 以上且强度很低，不再有压迫感。 */
       [
-        [55.0, 0.100], [82.41, 0.055], [110.0, 0.024],
-        [164.81, 0.009], [220.0, 0.004],
+        [110.00, 0.052],   // A2
+        [164.81, 0.028],   // E3（纯五度）
+        [220.00, 0.015],   // A3
+        [329.63, 0.006],   // E4
       ].forEach(([f, base], i) => {
         const o = ctx.createOscillator();
         o.type = 'sine';
-        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+        o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.003);
         const g = ctx.createGain();
         g.gain.value = base;
-        lfo(ctx, 0.03 + i * 0.017, base * 0.5, g.gain);   // 极慢的音量呼吸
+        /* 音量的起伏大幅收浅：原来 ±50%，现在 ±12%，
+           且周期拉长到 30~70 秒。原来的深度与多个不同周期叠加后，
+           会产生缓慢而不规则的抽动 —— 说不出哪里不对，但就是不舒服。 */
+        lfo(ctx, 0.014 + i * 0.008, base * 0.12, g.gain);
         o.connect(g).connect(cut1);
         o.start();
       });
 
-      // 空气：带通噪声，缓慢起伏
+      // 呼吸层：不做音高，只留噪声。它是「有生命力」的来源，
+      // 也是替代低频垫音的主要质感 —— 所以这里给得比原来厚一点。
       const air = ctx.createGain();
-      air.gain.value = 0.022;
-      lfo(ctx, 0.045, 0.014, air.gain);
+      air.gain.value = 0.055;
+      lfo(ctx, 0.028, 0.030, air.gain);        // 约 36 秒一次的呼气感
       const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 820;      // 原 1300Hz 偏嘶；降下来更像远处空气
-      bp.Q.value = 0.5;
+      bp.type = 'lowpass';
+      bp.frequency.value = 560;                 // 无音高的气声，压在低频上方
+      bp.Q.value = 0.4;
       loopNoise(ctx, pinkBuffer(ctx, 6)).connect(bp).connect(air).connect(out);
 
       // 颂钵：反馈延迟做长余韵，随机触发
@@ -2950,7 +2961,7 @@ body.is-calm .glow { opacity: 0.35 !important; }
        目标取各声景的中位数，补偿限制在 ±3 倍以内
        （不取最轻的当基准 —— 那样会把雨和篝火压到几乎听不见，抹掉声景性格）。
        琴偏轻是刻意的：稀疏音符的感知响度本就低。 */
-    const TRIM = { drone: 1.79, rain: 0.51, waves: 0.94, fire: 0.48, forest: 1.06, piano: 3.0 };
+    const TRIM = { drone: 2.58, rain: 0.51, waves: 0.94, fire: 0.48, forest: 1.06, piano: 3.0 };
 
     const SCAPES = {
       drone:  { label: '深空',   build: drone  },
